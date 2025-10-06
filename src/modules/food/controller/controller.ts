@@ -15,8 +15,20 @@ class FoodController implements IController {
   getFoods = async (req: Request, res: Response) => {
     const foodResponse = await this.foodService.getFoods(
       Number(req.query.page) || 1,
-      Number(req.query.limit) || 10
+      Number(req.query.limit) || 10,
+      req.query?.search as string,
+      req.query?.country as string,
+      req.query?.region as string
     );
+
+    if (foodResponse.foods.length === 0) {
+      return res.status(404).json({
+        data: [],
+        totalpages: foodResponse.totalpages,
+        page: foodResponse.page,
+        totalItems: foodResponse.totalItems,
+      });
+    }
     res.status(200).json({
       data: foodResponse.foods,
       totalpages: foodResponse.totalpages,

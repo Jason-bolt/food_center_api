@@ -15,9 +15,30 @@ class FoodService implements IService {
     }
   };
 
-  getFoods = async (page: number, limit: number) => {
+  getFoods = async (
+    page: number,
+    limit: number,
+    search?: string,
+    country?: string,
+    region?: string
+  ) => {
     try {
-      const foods = await FoodModel.find();
+      const skip = (page - 1) * limit;
+
+      const whereClause: any = {};
+      if (search) {
+        whereClause.name = { $regex: search, $options: "i" };
+      }
+      if (country) {
+        whereClause.country = { $regex: country, $options: "i" };
+      }
+      if (region) {
+        whereClause.region = { $regex: region, $options: "i" };
+      }
+      const foods = await FoodModel.find()
+        .skip(skip)
+        .limit(limit)
+        .where(whereClause);
       const foodCount = await FoodModel.countDocuments();
       return {
         foods,
