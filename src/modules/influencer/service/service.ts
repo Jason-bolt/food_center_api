@@ -6,37 +6,70 @@ import InfluencerFoodModel from "../../../../config/db/models/InfluencerFoodMode
 import {
   InfluencerFoodType,
   InfluencerFoodVideoType,
+  InsertInfluencerFoodType,
 } from "../../../../utils/types/InfluencerTypes";
+import inngest from "../../../../inngest";
 
 class InfluencerService implements IService {
-  createInfluencer = async (influencer: Partial<InfluencerType>) => {
+  createInfluencer = async (influencer: InsertInfluencerFoodType) => {
     try {
-      const newInfluencer = new InfluencerModel(influencer as InfluencerType);
+      const newInfluencer = new InfluencerModel(influencer);
       await newInfluencer.save();
+
+      inngest.send({
+        name: "update_influencer_food_youtube_details.event",
+        data: {
+          foodLinks: influencer.foodLinks,
+          influencerName: influencer.name,
+        },
+      });
       return newInfluencer as InfluencerType;
     } catch (error) {
       throw new Error("Failed to create influencer");
     }
   };
 
-  //   updateInfluencer = async (id: string, influencer: Partial<InfluencerType>) => {
-  //     const updatedInfluencer = await InfluencerModel.findByIdAndUpdate(id, influencer, { new: true });
-  //     return updatedInfluencer as InfluencerType;
-  //   };
+  getInfluencers = async () => {
+    try {
+      const influencers = await InfluencerModel.find();
+      return influencers as InfluencerType[];
+    } catch (error) {
+      throw new Error("Failed to get influencers");
+    }
+  };
 
-  //   deleteInfluencer = async (id: string) => {
-  //     await InfluencerModel.findByIdAndDelete(id);
-  //   };
+  getInfluencer = async (id: string) => {
+    try {
+      const influencer = await InfluencerModel.findById(id);
+      return influencer as InfluencerType;
+    } catch (error) {
+      throw new Error("Failed to get influencer");
+    }
+  };
 
-  //   getInfluencers = async () => {
-  //     const influencers = await InfluencerModel.find();
-  //     return influencers as InfluencerType[];
-  //   };
+  updateInfluencer = async (
+    id: string,
+    influencer: Partial<InfluencerType>
+  ) => {
+    try {
+      const updatedInfluencer = await InfluencerModel.findByIdAndUpdate(
+        id,
+        influencer,
+        { new: true }
+      );
+      return updatedInfluencer as InfluencerType;
+    } catch (error) {
+      throw new Error("Failed to update influencer");
+    }
+  };
 
-  //   getInfluencer = async (id: string) => {
-  //     const influencer = await InfluencerModel.findById(id);
-  //     return influencer as InfluencerType;
-  //   };
+  deleteInfluencer = async (id: string) => {
+    try {
+      await InfluencerModel.findByIdAndDelete(id);
+    } catch (error) {
+      throw new Error("Failed to delete influencer");
+    }
+  };
 
   //   getInfluencerFoods = async (id: string) => {
   //     const influencerFoods = await InfluencerFoodModel.find({ influencerId: id });

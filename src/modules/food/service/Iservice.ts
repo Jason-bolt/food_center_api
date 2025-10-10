@@ -15,6 +15,7 @@ export default interface IService {
     totalItems: number;
     page: number;
   }>;
+  getFoodsNonPaginated: () => Promise<FoodType[]>;
   getFood: (id: string) => Promise<FoodType>;
   getFoodInfluencers: (foodId: string) => Promise<InfluencerFoodType[]>;
   getFoodVideos: (foodId: string) => Promise<InfluencerFoodType[]>;

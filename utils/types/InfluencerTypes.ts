@@ -48,3 +48,21 @@ export interface InfluencerFoodVideoType {
     }[];
   }[];
 }
+
+export interface InsertInfluencerFoodType {
+  name: string;
+  description: string;
+  imageUrl?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
+  facebook?: string;
+  twitter?: string;
+  snapchat?: string;
+  website?: string;
+  linkedin?: string;
+  foodLinks: {
+    foodId: string;
+    videoUrls: string[];
+  }[];
+}

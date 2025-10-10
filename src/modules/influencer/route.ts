@@ -8,16 +8,26 @@ const influencerRouter = Router();
 influencerRouter.post(
   "/",
   influencerMiddleware.validateInfluencer,
+  tryCatchHelper(influencerMiddleware.isUniqueInfluencerName),
   tryCatchHelper(influencerController.createInfluencer)
 );
-// influencerRouter.get(
-//   "/",
-//   tryCatchHelper(influencerController.getInfluencers)
-// );
-// influencerRouter.get("/:id", tryCatchHelper(influencerController.getInfluencer));
+influencerRouter.get("/", tryCatchHelper(influencerController.getInfluencers));
+influencerRouter.get(
+  "/:id",
+  tryCatchHelper(influencerController.getInfluencer)
+);
+influencerRouter.put(
+  "/:id",
+  influencerMiddleware.validateInfluencer,
+  tryCatchHelper(influencerMiddleware.doesInfluencerExist),
+  tryCatchHelper(influencerController.updateInfluencer)
+);
+influencerRouter.delete(
+  "/:id",
+  tryCatchHelper(influencerMiddleware.doesInfluencerExist),
+  tryCatchHelper(influencerController.deleteInfluencer)
+);
 // influencerRouter.get("/:id/foods", tryCatchHelper(influencerController.getInfluencerFoods));
 // influencerRouter.get("/:id/videos", tryCatchHelper(influencerController.getInfluencerVideos));
-// influencerRouter.put("/:id", tryCatchHelper(influencerController.updateInfluencer));
-// influencerRouter.delete("/:id", tryCatchHelper(influencerController.deleteInfluencer));
 
 export default influencerRouter;

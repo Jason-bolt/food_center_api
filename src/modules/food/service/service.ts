@@ -51,6 +51,15 @@ class FoodService implements IService {
     }
   };
 
+  getFoodsNonPaginated = async () => {
+    try {
+      const foods = await FoodModel.find();
+      return foods as FoodType[];
+    } catch (error) {
+      throw new Error("Failed to get foods");
+    }
+  };
+
   getFood = async (id: string) => {
     try {
       const food = await FoodModel.findById(id);
@@ -95,6 +104,7 @@ class FoodService implements IService {
   deleteFood = async (id: string) => {
     try {
       await FoodModel.findByIdAndDelete(id);
+      await InfluencerFoodModel.deleteMany({ foodId: id });
     } catch (error) {
       throw new Error("Failed to delete food");
     }
