@@ -7,11 +7,23 @@ import { serve } from "inngest/express";
 import functions from "./inngest/functions";
 import inngest from "./inngest";
 import dotenv from "dotenv";
+import { rateLimit } from "express-rate-limit";
 
 dotenv.config();
 const app = express();
 
 connectDB();
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  ipv6Subnet: 56,
+});
+
+// Apply the rate limiting middleware to all requests.
+app.use(limiter);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

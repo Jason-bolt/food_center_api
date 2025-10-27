@@ -17,6 +17,8 @@ A comprehensive backend API for a food discovery platform that highlights the ri
 - **Inngest** (background job processing)
 - **Redis** (caching)
 - **YouTube API** (video metadata extraction)
+- **Pino** (logging with pino-pretty)
+- **Express Rate Limit** (API rate limiting)
 - **ESLint** (code quality)
 
 ## Getting Started
@@ -37,9 +39,9 @@ npm install
 
 ### Environment Variables
 
-Create a `.env` file based on `.env.example` in the project root.
+Create a `.env` file in the project root with the following variables:
 
-Required variables:
+**Required variables:**
 
 - `MONGODB_URI` – MongoDB connection string
 - `CLOUDINARY_CLOUD_NAME` – Cloudinary cloud name
@@ -47,6 +49,12 @@ Required variables:
 - `CLOUDINARY_API_SECRET` – Cloudinary API secret
 - `REDIS_URL` – Redis connection string
 - `GOOGLE_YOUTUBE_API_KEY` – YouTube API key for video metadata
+
+**Optional variables:**
+
+- `NODE_ENV` – Environment mode (`development` or `production`, defaults to `development`)
+  - Set to `development` for debug-level logging and development features
+  - Set to `production` for info-level logging
 
 Cloudinary is configured in `config/cloudinary/index.ts`, MongoDB is initialized in `config/db/index.ts`, and Redis is configured in `utils/services/redis.ts`.
 
@@ -138,8 +146,10 @@ The server starts on port `3000` by default. Base path for APIs: `/api/v1`. Inng
 │  │  ├─ redis.ts                # Redis client and operations
 │  │  └─ youtube.ts              # YouTube API integration
 │  ├─ tryCatchHelper.ts          # Error handling wrapper
+│  ├─ logger.ts                  # Pino logger configuration
 │  └─ types/
-│     └─ InfluencerTypes.ts      # TypeScript type definitions
+│     ├─ FoodTypes.ts            # Food type definitions
+│     └─ InfluencerTypes.ts      # Influencer type definitions
 ├─ eslint.config.mts            # ESLint configuration
 └─ tsconfig.json
 ```
@@ -224,6 +234,8 @@ See `config/db/models/*` for actual schemas and `utils/types/InfluencerTypes.ts`
 
 - `helmet` and `cors` enabled globally
 - `express.json` and `express.urlencoded` enabled
+- **Rate limiting** enabled globally (100 requests per 15 minutes per IP)
+- **Pino logger** for structured logging with environment-based log levels
 
 ## Scripts
 
@@ -253,17 +265,20 @@ See `config/db/models/*` for actual schemas and `utils/types/InfluencerTypes.ts`
 - ✅ Comprehensive error handling
 - ✅ TypeScript type safety
 - ✅ ESLint code quality checks
+- ✅ **Pino structured logging** with environment-based levels
+- ✅ **API rate limiting** (100 requests per 15 minutes)
 
 ## Roadmap
 
 - 🔄 Authentication for admin curation
-- 🔄 Rate limiting and request logging
 - 🔄 Advanced search and filtering
 - 🔄 Video thumbnail optimization
 - 🔄 API documentation with Swagger
 - 🔄 Unit and integration tests
 - 🔄 Docker containerization
 - 🔄 CI/CD pipeline setup
+- 🔄 Request logging middleware
+- 🔄 Health check endpoints
 
 ## License
 

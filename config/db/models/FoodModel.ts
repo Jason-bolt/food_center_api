@@ -4,6 +4,7 @@ const FoodSchema = new mongoose.Schema({
   name: { type: String, required: true },
   country: { type: String, required: true },
   region: { type: String, required: true },
+  culturalStory: { type: String, required: true },
   description: { type: String, required: true },
   imageUrl: { type: String, required: true },
   ingredients: { type: [String], required: true },

@@ -7,6 +7,7 @@ import {
   setRedisData,
 } from "../../../../utils/services/redis";
 import { InsertInfluencerFoodType } from "../../../../utils/types/InfluencerTypes";
+import logger from "../../../../utils/logger";
 
 class InfluencerController implements IController {
   constructor(private readonly influencerService: InfluencerService) {}
@@ -15,6 +16,10 @@ class InfluencerController implements IController {
     const influencer = req.body as InsertInfluencerFoodType;
     const newInfluencer = await this.influencerService.createInfluencer(
       influencer
+    );
+    logger.debug(
+      { newInfluencer },
+      "[InfluencerController - createInfluencer]: Created new influencer data"
     );
     res.status(201).json(newInfluencer);
   };
@@ -25,6 +30,10 @@ class InfluencerController implements IController {
       influencers = await this.influencerService.getInfluencers();
       await setRedisData("influencers:unpaginated", influencers);
     }
+    logger.debug(
+      { influencersCount: influencers?.length || 0 },
+      "[InfluencerController - getInfluencers]: Fetched influencers"
+    );
     res.status(200).json(influencers);
   };
 
@@ -35,9 +44,17 @@ class InfluencerController implements IController {
       await setRedisData(`influencers:${req.params.id}`, influencer);
     }
     if (!influencer) {
+      logger.info(
+        { influencerId: req.params.id },
+        "[InfluencerController - getInfluencer]: Influencer not found"
+      );
       res.status(404).json({ message: "Influencer not found" });
       return;
     }
+    logger.debug(
+      { influencer, influencerId: req.params.id },
+      "[InfluencerController - getInfluencer]: Fetched influencer"
+    );
     res.status(200).json(influencer);
   };
 
@@ -49,12 +66,20 @@ class InfluencerController implements IController {
     );
     await deleteRedisData(`influencers:${req.params.id}`);
     await setRedisData(`influencers:${req.params.id}`, updatedInfluencer);
+    logger.debug(
+      { updatedInfluencer, influencerId: req.params.id },
+      "[InfluencerController - updateInfluencer]: Updated influencer"
+    );
     res.status(200).json(updatedInfluencer);
   };
 
   deleteInfluencer = async (req: Request, res: Response): Promise<void> => {
     await this.influencerService.deleteInfluencer(req.params.id);
     await deleteRedisData(`influencers:${req.params.id}`);
+    logger.debug(
+      { influencerId: req.params.id },
+      "[InfluencerController - deleteInfluencer]: Deleted influencer"
+    );
     res.status(200).json({ message: "Influencer deleted successfully" });
   };
 

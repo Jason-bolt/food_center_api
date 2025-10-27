@@ -2,6 +2,7 @@ import inngest from "..";
 import FoodModel from "../../config/db/models/FoodModel";
 import InfluencerFoodModel from "../../config/db/models/InfluencerFoodModel";
 import InfluencerModel from "../../config/db/models/InfluencerModel";
+import logger from "../../utils/logger";
 import getYoutubeVideoTitleAndThumbnail from "../../utils/services/youtube";
 
 const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
@@ -16,16 +17,18 @@ const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
         }[] = [];
 
         await Promise.all(
-          event.data.foodLinks.map(async (foodLink: any) => {
-            const food = await FoodModel.findById(foodLink.foodId);
-            console.log("Food", food);
-            if (food) {
-              validFoods.push({
-                foodId: foodLink.foodId,
-                videoUrls: foodLink.videoUrls,
-              });
+          event.data.foodLinks.map(
+            async (foodLink: { foodId: string; videoUrls: string[] }) => {
+              const food = await FoodModel.findById(foodLink.foodId);
+              console.log("Food", food);
+              if (food) {
+                validFoods.push({
+                  foodId: foodLink.foodId,
+                  videoUrls: foodLink.videoUrls,
+                });
+              }
             }
-          })
+          )
         );
 
         console.log("validFoods", validFoods);
@@ -43,7 +46,7 @@ const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
       });
 
       await step.run("update_influencer_food_youtube_details", async () => {
-        const influencerId = (influencer as any)?._id;
+        const influencerId = (influencer as { _id: string })?._id;
         await Promise.all(
           validFoods.map(async (validFood) => {
             await Promise.all(
@@ -71,6 +74,7 @@ const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
         success: true,
       };
     } catch (error) {
+      logger.debug(error, "Error from influencer food youtube details.");
       return {
         success: false,
       };

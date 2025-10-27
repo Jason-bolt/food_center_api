@@ -1,9 +1,9 @@
 import { InfluencerType } from "../../../../config/db/models/InfluencerModel";
 import {
-  InfluencerFoodType,
+  // InfluencerFoodType,
   InsertInfluencerFoodType,
 } from "../../../../utils/types/InfluencerTypes";
-import { InfluencerFoodVideoType } from "../../../../utils/types/InfluencerTypes";
+// import { InfluencerFoodVideoType } from "../../../../utils/types/InfluencerTypes";
 
 export default interface IService {
   createInfluencer: (
