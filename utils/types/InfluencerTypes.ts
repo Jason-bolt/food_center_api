@@ -1,5 +1,5 @@
 export interface InfluencerFoodType {
-  iinfluencer: {
+  influencer: {
     id: string;
     name: string;
     description: string;

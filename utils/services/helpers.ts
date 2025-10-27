@@ -8,6 +8,7 @@ export const getYouTubeID = (url: string) => {
     return null;
   }
   const regex =
+    // eslint-disable-next-line no-useless-escape
     /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
   const match = url.match(regex);
   return match && match[1].length === 11 ? match[1] : null;

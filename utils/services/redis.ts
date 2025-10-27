@@ -11,7 +11,7 @@ const getRedisData = async (key: string) => {
   return JSON.parse(data as string);
 };
 
-const setRedisData = async (key: string, data: any, ttl: number = 10) => {
+const setRedisData = async <T>(key: string, data: T, ttl: number = 10) => {
   await redisClient.set(key, JSON.stringify(data), { EX: ttl, NX: true });
 };
 
