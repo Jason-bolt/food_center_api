@@ -109,7 +109,9 @@ class FoodService implements IService {
 
   getFoodInfluencers = async (foodId: string) => {
     try {
-      const foodInfluencers = await InfluencerFoodModel.find({ foodId });
+      const foodInfluencers = await InfluencerFoodModel.find({
+        food: foodId,
+      }).populate("influencer", "name");
       logger.info(
         { foodId, influencersCount: foodInfluencers.length },
         "[FoodService - getFoodInfluencers]: Successfully fetched food influencers"
@@ -126,7 +128,7 @@ class FoodService implements IService {
 
   getFoodVideos = async (foodId: string) => {
     try {
-      const foodVideos = await InfluencerFoodModel.find({ foodId });
+      const foodVideos = await InfluencerFoodModel.find({ food: foodId });
       logger.info(
         { foodId, videosCount: foodVideos.length },
         "[FoodService - getFoodVideos]: Successfully fetched food videos"
@@ -170,7 +172,7 @@ class FoodService implements IService {
   deleteFood = async (id: string) => {
     try {
       await FoodModel.findByIdAndDelete(id);
-      await InfluencerFoodModel.deleteMany({ foodId: id });
+      await InfluencerFoodModel.deleteMany({ food: id });
       logger.info(
         { foodId: id },
         "[FoodService - deleteFood]: Successfully deleted food and associated data"

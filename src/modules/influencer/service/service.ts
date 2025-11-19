@@ -81,7 +81,7 @@ class InfluencerService implements IService {
 
   updateInfluencer = async (
     id: string,
-    influencer: Partial<InfluencerType>
+    influencer: InsertInfluencerFoodType
   ) => {
     try {
       const updatedInfluencer = await InfluencerModel.findByIdAndUpdate(
@@ -100,6 +100,14 @@ class InfluencerService implements IService {
           "[InfluencerService - updateInfluencer]: Successfully updated influencer"
         );
       }
+
+      inngest.send({
+        name: "update_influencer_food_youtube_details.event",
+        data: {
+          foodLinks: influencer.foodLinks,
+          influencerName: influencer.name,
+        },
+      });
       return updatedInfluencer as InfluencerType;
     } catch (error) {
       logger.error(
@@ -127,12 +135,12 @@ class InfluencerService implements IService {
   };
 
   //   getInfluencerFoods = async (id: string) => {
-  //     const influencerFoods = await InfluencerFoodModel.find({ influencerId: id });
+  //     const influencerFoods = await InfluencerFoodModel.find({ influencer: id });
   //     return influencerFoods as InfluencerFoodType[];
   //   };
 
   //   getInfluencerVideos = async (id: string) => {
-  //     const influencerVideos = await InfluencerFoodModel.find({ influencerId: id });
+  //     const influencerVideos = await InfluencerFoodModel.find({ influencer: id });
   //     return influencerVideos as InfluencerFoodVideoType[];
   //   };
 }
