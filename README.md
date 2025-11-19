@@ -160,75 +160,208 @@ Base URL: `http://localhost:3000/api/v1`
 
 ### Foods
 
-- GET `/foods`
-  - Query: `page` (number, default 1), `limit` (number, default 10), `search` (string), `country` (string), `region` (string)
-  - Response: `{ foods: Food[], totalpages, page, totalItems }`
-- GET `/foods`
-  - Non-paginated version for dropdowns/selects
-- GET `/foods/:id`
-  - Get a single food by ID
-- POST `/foods`
-  - Body: JSON matching `Food` schema (validated server-side)
-  - Creates a new food
-- PUT `/foods/:id`
-  - Body: Partial `Food` fields
-  - Updates a food
-- DELETE `/foods/:id`
-  - Deletes a food and associated influencer relationships
-- GET `/foods/:id/influencers`
-  - List influencers associated with a food
-- GET `/foods/:id/videos`
-  - List recipe videos associated with a food
+- **GET `/foods`** (Paginated)
+  - Query parameters:
+    - `page` (number, default: 1) - Page number
+    - `limit` (number, default: 10) - Items per page
+    - `search` (string, optional) - Search by food name
+    - `country` (string, optional) - Filter by country
+    - `region` (string, optional) - Filter by region
+  - Response: `{ foods: Food[], totalpages: number, page: number, totalItems: number }`
+  - Cached in Redis for performance
+
+- **GET `/foods/all/items/nonpaginated`** (Non-paginated)
+  - Returns all foods without pagination (useful for dropdowns/selects)
+  - Response: `Food[]`
+  - Cached in Redis
+
+- **GET `/foods/:id`**
+  - Get a single food by MongoDB ObjectId
+  - Response: `Food` object
+  - Returns 404 if food doesn't exist
+
+- **POST `/foods`**
+  - Body: JSON object with required fields:
+    - `name` (string, min 1 char) - Food name
+    - `country` (string, min 1 char) - Country of origin
+    - `region` (string, min 1 char) - Region within country
+    - `culturalStory` (string, min 1 char) - Cultural background story
+    - `description` (string, min 1 char) - Food description
+    - `imageUrl` (string, min 1 char) - Image URL (use `/upload` endpoint)
+    - `ingredients` (string[], min 1 item) - Array of ingredient names
+  - Validates uniqueness of food name
+  - Response: Created `Food` object (201 status)
+  - Invalidates related Redis cache
+
+- **PUT `/foods/:id`**
+  - Body: Partial JSON object with any `Food` fields
+  - Updates existing food
+  - Validates food exists before update
+  - Response: Updated `Food` object
+  - Invalidates related Redis cache
+
+- **DELETE `/foods/:id`**
+  - Deletes a food by ID
+  - Also deletes associated `InfluencerFood` relationships
+  - Validates food exists before deletion
+  - Response: Success message
+  - Invalidates related Redis cache
+
+- **GET `/foods/:id/influencers`**
+  - List all influencers associated with a specific food
+  - Response: Array of influencer objects
+
+- **GET `/foods/:id/videos`**
+  - List all recipe videos associated with a specific food
+  - Response: Array of video objects with metadata (title, thumbnail, URL, publish date)
 
 ### Influencers
 
-- GET `/influencers`
-  - List all influencers
-- GET `/influencers/:id`
-  - Get a single influencer by ID
-- POST `/influencers`
-  - Body: JSON with influencer data and associated food links
-  - Creates a new influencer and triggers background job to process YouTube videos
-- PUT `/influencers/:id`
-  - Body: Partial influencer fields
-  - Updates an influencer
-- DELETE `/influencers/:id`
-  - Deletes an influencer
+- **GET `/influencers`**
+  - List all influencers (non-paginated)
+  - Response: Array of `Influencer` objects
+  - Cached in Redis
+
+- **GET `/influencers/:id`**
+  - Get a single influencer by MongoDB ObjectId
+  - Response: `Influencer` object with populated data
+  - Returns 404 if influencer doesn't exist
+  - Cached in Redis
+
+- **POST `/influencers`**
+  - Body: JSON object with required and optional fields:
+    - `name` (string, min 1 char, required) - Influencer name
+    - `description` (string, min 1 char, required) - Influencer description
+    - `imageUrl` (string, optional) - Profile image URL
+    - `instagram`, `youtube`, `tiktok`, `facebook`, `twitter`, `snapchat`, `linkedin`, `website` (string, optional) - Social media links
+    - `foodLinks` (array, required) - Array of objects with:
+      - `foodId` (string, min 1 char) - MongoDB ObjectId of existing food
+      - `videoUrls` (string[], min 1 item) - Array of YouTube video URLs
+  - Validates uniqueness of influencer name
+  - Validates that all foodIds exist
+  - Creates influencer and triggers Inngest background job to process YouTube videos
+  - Background job extracts video metadata (title, thumbnail, publish date) and creates `InfluencerFood` records
+  - Response: Created `Influencer` object (201 status)
+  - Invalidates related Redis cache
+
+- **PUT `/influencers/:id`**
+  - Body: Partial JSON object with any `Influencer` fields
+  - Updates existing influencer
+  - Validates influencer exists before update
+  - Response: Updated `Influencer` object
+  - Invalidates related Redis cache
+
+- **DELETE `/influencers/:id`**
+  - Deletes an influencer by ID
+  - Also deletes associated `InfluencerFood` relationships
+  - Validates influencer exists before deletion
+  - Response: Success message
+  - Invalidates related Redis cache
 
 ### Uploads
 
-- POST `/upload`
-  - Form-data: single file under field name `imageUrl`
-  - Uploads to Cloudinary and returns upload information
+- **POST `/upload`**
+  - Content-Type: `multipart/form-data`
+  - Body: Form data with field name `imageUrl` containing a single image file
+  - Uploads image to Cloudinary
+  - Response: Cloudinary upload information including:
+    - `secure_url` - HTTPS URL for the uploaded image
+    - `public_id` - Cloudinary public ID
+    - `format`, `width`, `height`, `bytes` - Image metadata
+  - Use the returned `secure_url` as the `imageUrl` field when creating foods or influencers
 
 ## Background Jobs (Inngest)
 
-The platform uses Inngest for background job processing:
+The platform uses **Inngest** for asynchronous background job processing:
 
-- **YouTube Video Processing**: When an influencer is created with food links containing YouTube URLs, a background job automatically:
-  - Extracts video metadata (title, thumbnail, publish date)
-  - Creates `InfluencerFood` records linking foods to influencers
-  - Handles errors gracefully with retry logic
+- **Inngest Endpoint**: `/api/inngest` - Webhook endpoint for Inngest to trigger functions
+- **YouTube Video Processing**: 
+  - Triggered automatically when an influencer is created with `foodLinks` containing YouTube URLs
+  - Background job (`update_influencer_food_youtube_details`) processes videos asynchronously:
+    1. Validates that all food IDs exist in the database
+    2. Retrieves the created influencer by name
+    3. For each food-video combination:
+       - Extracts YouTube video ID from URL
+       - Calls YouTube API to fetch metadata (title, thumbnail, publish date)
+       - Creates `InfluencerFood` record with video metadata
+  - **Error Handling**: 
+    - Automatic retry logic (3 retries) for transient failures
+    - Graceful error handling with step-by-step execution
+    - Failed jobs can be inspected in Inngest dashboard
+- **Development**: Run `npm run inngest:start` to start Inngest dev server (port 8288)
+- **Production**: Configure Inngest sync URL in your Inngest dashboard
 
-## Data Models (high level)
+## Data Models
 
-- `Food` – Core entity for a dish, with fields such as name, country, region, description, image, etc.
-- `Influencer` – Creator or chef with profile and social media links
-- `InfluencerFood` – Mapping of `Food` to `Influencer` with video metadata (URL, title, thumbnail, publish date)
+### Food Model
+Core entity representing a dish from African cuisine:
+- `name` (String, required) - Food name (must be unique)
+- `country` (String, required) - Country of origin
+- `region` (String, required) - Region within the country
+- `culturalStory` (String, required) - Cultural background and history
+- `description` (String, required) - Food description
+- `imageUrl` (String, required) - URL to food image (Cloudinary)
+- `ingredients` (String[], required) - Array of ingredient names
+- `createdAt` (Date, auto) - Creation timestamp
+- `updatedAt` (Date, auto) - Last update timestamp
 
-See `config/db/models/*` for actual schemas and `utils/types/InfluencerTypes.ts` for TypeScript definitions.
+### Influencer Model
+Represents a food content creator or chef:
+- `name` (String, required) - Influencer name (must be unique)
+- `description` (String, required) - Influencer bio/description
+- `imageUrl` (String, optional) - Profile image URL
+- `instagram`, `youtube`, `tiktok`, `facebook`, `twitter`, `snapchat`, `linkedin`, `website` (String, optional) - Social media links
+- `createdAt` (Date, auto) - Creation timestamp
+- `updatedAt` (Date, auto) - Last update timestamp
+
+### InfluencerFood Model
+Junction table linking foods to influencers with video metadata:
+- `influencer` (ObjectId, ref: Influencer, required) - Reference to influencer
+- `food` (ObjectId, ref: Food, required) - Reference to food
+- `videoUrl` (String, required) - YouTube video URL
+- `videoId` (String, required) - Extracted YouTube video ID
+- `videoTitle` (String, required) - Video title from YouTube API
+- `videoThumbnailUrl` (String, required) - Video thumbnail URL from YouTube API
+- `videoPublishedAt` (Date, required) - Video publish date from YouTube API
+- `createdAt` (Date, auto) - Creation timestamp
+- `updatedAt` (Date, auto) - Last update timestamp
+
+See `config/db/models/*` for actual Mongoose schemas and `utils/types/*.ts` for TypeScript type definitions.
 
 ## Validation
 
-- Zod schemas in `config/zod/schemas/` for both food and influencer validation
-- Request validation middleware in respective module middleware files
-- TypeScript interfaces in `utils/types/InfluencerTypes.ts`
+- **Zod schemas** in `config/zod/schemas/` for request validation:
+  - `food.ts` - Validates food creation/update requests
+  - `influencer.ts` - Validates influencer creation/update requests
+- **Request validation middleware** in respective module middleware files:
+  - Validates request body against Zod schemas before processing
+  - Returns 400 status with validation errors if invalid
+- **Business logic validation**:
+  - Uniqueness checks for food names and influencer names
+  - Existence checks before update/delete operations
+  - Food ID validation when creating influencer-food relationships
+- **TypeScript interfaces** in `utils/types/` for type safety:
+  - `FoodTypes.ts` - Food type definitions
+  - `InfluencerTypes.ts` - Influencer and InfluencerFood type definitions
 
 ## Caching & Performance
 
-- **Redis Integration**: Caching layer for improved performance
-- **Background Processing**: Heavy operations (YouTube API calls) handled asynchronously
-- **Error Handling**: Comprehensive error handling with try-catch wrappers
+- **Redis Integration**: 
+  - Caching layer for frequently accessed data
+  - Cache keys include: `foods:*`, `influencers:*`, `influencers:unpaginated`
+  - Default TTL: 10 seconds (configurable in `utils/services/redis.ts`)
+  - Cache invalidation on create/update/delete operations
+  - Automatic cache refresh on cache miss
+
+- **Background Processing**: 
+  - Heavy operations (YouTube API calls) handled asynchronously via Inngest
+  - Prevents blocking of API requests during video metadata extraction
+  - Automatic retry logic (3 retries) for failed jobs
+
+- **Error Handling**: 
+  - Comprehensive error handling with `tryCatchHelper` wrapper
+  - Structured error responses
+  - Pino logger integration for error tracking
 
 ## Security & Middleware
 
@@ -237,12 +370,23 @@ See `config/db/models/*` for actual schemas and `utils/types/InfluencerTypes.ts`
 - **Rate limiting** enabled globally (100 requests per 15 minutes per IP)
 - **Pino logger** for structured logging with environment-based log levels
 
+## Logging
+
+The application uses **Pino** for structured logging:
+
+- **Development mode** (`NODE_ENV=development`): Debug-level logging with `pino-pretty` for readable console output
+- **Production mode** (`NODE_ENV=production`): Info-level logging for performance
+- Logs include contextual information (request IDs, operation details, error stacks)
+- Logger is available via `utils/logger.ts` and used throughout controllers and services
+- Structured logging format enables easy parsing and analysis
+
 ## Scripts
 
-- `dev` – start development server with `nodemon` and `ts-node`
-- `build` – compile TypeScript to `dist`
-- `inngest:start` – start Inngest dev server for background job processing
+- `dev` – start development server with `nodemon` and `ts-node` (auto-reload on file changes)
+- `build` – compile TypeScript to `dist` directory
+- `inngest:start` – start Inngest dev server for background job processing (runs on port 8288)
 - `lint` – run ESLint for code quality checks
+- `lint:fix` – run ESLint and automatically fix fixable issues
 
 ## Contributing
 
