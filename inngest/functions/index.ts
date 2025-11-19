@@ -51,14 +51,39 @@ const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
           validFoods.map(async (validFood) => {
             await Promise.all(
               validFood.videoUrls.map(async (videoUrl: string) => {
-                const { thumbnailUrl, title, publishedAt } =
+                const { thumbnailUrl, title, publishedAt, videoId } =
                   await getYoutubeVideoTitleAndThumbnail(videoUrl);
-                console.log(thumbnailUrl, title, publishedAt);
+                console.log(thumbnailUrl, title, publishedAt, videoId);
+
+                const existingInfluncerFood = await InfluencerFoodModel.findOne(
+                  {
+                    food: validFood.foodId,
+                    influencer: influencerId,
+                    videoId,
+                  }
+                );
+
+                if (existingInfluncerFood) {
+                  await InfluencerFoodModel.findOneAndUpdate(
+                    existingInfluncerFood._id,
+                    {
+                      food: validFood.foodId,
+                      influencer: influencerId,
+                      videoUrl,
+                      videoId,
+                      videoTitle: title,
+                      videoThumbnailUrl: thumbnailUrl,
+                      videoPublishedAt: publishedAt,
+                    }
+                  );
+                  return;
+                }
 
                 const influencerFood = new InfluencerFoodModel({
-                  foodId: validFood.foodId,
-                  influencerId: influencerId,
+                  food: validFood.foodId,
+                  influencer: influencerId,
                   videoUrl,
+                  videoId,
                   videoTitle: title,
                   videoThumbnailUrl: thumbnailUrl,
                   videoPublishedAt: publishedAt,

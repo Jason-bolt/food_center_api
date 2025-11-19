@@ -14,6 +14,7 @@ const getYoutubeVideoTitleAndThumbnail = async (videoUrl: string) => {
     thumbnailUrl,
     title,
     publishedAt,
+    videoId,
   };
 };
 

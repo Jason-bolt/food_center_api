@@ -13,7 +13,7 @@ export default interface IService {
   getInfluencer: (id: string) => Promise<InfluencerType>;
   updateInfluencer: (
     id: string,
-    influencer: Partial<InfluencerType>
+    influencer: InsertInfluencerFoodType
   ) => Promise<InfluencerType>;
   deleteInfluencer: (id: string) => Promise<void>;
   //   getInfluencerFoods: (id: string) => Promise<InfluencerFoodType[]>;
