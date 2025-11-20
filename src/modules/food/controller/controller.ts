@@ -112,14 +112,16 @@ class FoodController implements IController {
   };
 
   getFoodInfluencers = async (req: Request, res: Response) => {
+    const influencerId = req.query?.influencerId as string;
     let foodInfluencers = await getRedisData(
-      `foods:${req.params.id}:influencers`
+      `foods:${req.params.id}:influencers:${influencerId}`
     );
     if (!foodInfluencers) {
       foodInfluencers = await this.foodService.getFoodInfluencers(
-        req.params.id
+        req.params.id,
+        influencerId
       );
-      await setRedisData(`foods:${req.params.id}:influencers`, foodInfluencers);
+      await setRedisData(`foods:${req.params.id}:influencers:${influencerId}`, foodInfluencers);
     }
     if (!foodInfluencers) {
       logger.info("[FoodController - getFoodInfluencers]: No food influencers");

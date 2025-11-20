@@ -107,11 +107,18 @@ class FoodService implements IService {
     }
   };
 
-  getFoodInfluencers = async (foodId: string) => {
+  getFoodInfluencers = async (foodId: string, influencerId?: string) => {
     try {
-      const foodInfluencers = await InfluencerFoodModel.find({
+      const whereClause: Record<string, string> = {
         food: foodId,
-      }).populate("influencer", "name");
+      };
+
+      if (influencerId) whereClause.influencer = influencerId;
+
+      const foodInfluencers = await InfluencerFoodModel.find(
+        whereClause
+      ).populate("influencer", "name");
+      
       logger.info(
         { foodId, influencersCount: foodInfluencers.length },
         "[FoodService - getFoodInfluencers]: Successfully fetched food influencers"
