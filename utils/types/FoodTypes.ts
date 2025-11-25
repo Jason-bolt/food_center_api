@@ -1,7 +1,7 @@
 export interface FoodType {
     id: string;
     name: string;
-    country: string;
+    countries: string[];
     region: string;
     culturalStory: string;
     description: string;

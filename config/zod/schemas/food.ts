@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const createFoodSchema = z.object({
   name: z.string().min(1),
-  country: z.string().min(1),
+  countries: z.array(z.string()).min(1),
   region: z.string().min(1),
   culturalStory: z.string().min(1),
   description: z.string().min(1),

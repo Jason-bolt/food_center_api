@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import FoodModel, { FoodType } from "../../../../config/db/models/FoodModel";
 import InfluencerFoodModel, {
   InfluencerFoodType,
@@ -34,26 +35,35 @@ class FoodService implements IService {
     try {
       const skip = (page - 1) * limit;
 
-      const whereClause: Record<string, { $regex: string; $options: string }> =
+      const whereClause: any =
         {};
       if (search) {
         whereClause.name = { $regex: search, $options: "i" };
       }
       if (country) {
-        whereClause.country = { $regex: country, $options: "i" };
+        whereClause.countries = {
+          $elemMatch: {
+            $regex: country,
+            $options: "i",
+          },
+        };
       }
       if (region) {
         whereClause.region = { $regex: region, $options: "i" };
       }
+
+      console.log(whereClause);
       const foods = await FoodModel.find()
         .skip(skip)
         .limit(limit)
         .where(whereClause);
       const foodCount = await FoodModel.countDocuments();
+
       logger.info(
         { foodsCount: foods.length, totalItems: foodCount, page, limit },
         "[FoodService - getFoods]: Successfully fetched paginated foods"
       );
+
       return {
         foods,
         totalpages: Math.ceil(foodCount / limit),
@@ -118,7 +128,7 @@ class FoodService implements IService {
       const foodInfluencers = await InfluencerFoodModel.find(
         whereClause
       ).populate("influencer", "name");
-      
+
       logger.info(
         { foodId, influencersCount: foodInfluencers.length },
         "[FoodService - getFoodInfluencers]: Successfully fetched food influencers"
