@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import IController from "./Icontroller";
 import { Request, Response } from "express";
 import cloudinary from "../../../../config/cloudinary";
@@ -16,11 +17,13 @@ class UploadController implements IController {
       return;
     }
 
+    
     try {
       const result = await cloudinary.uploader.upload(image.path, {
         resource_type: "image",
         folder: "food_center",
       });
+      console.log("IMAGE", image);
       if (!result) {
         logger.error(
           "[UploadController - uploadImage]: Failed to upload image - no result from Cloudinary"
@@ -33,9 +36,9 @@ class UploadController implements IController {
         "[UploadController - uploadImage]: Successfully uploaded image to Cloudinary"
       );
       res.status(200).json({ image: result.secure_url });
-    } catch (error) {
+    } catch (error: any) {
       logger.error(
-        { error, image: image?.filename },
+        { error: error.message, image: image?.filename },
         "[UploadController - uploadImage]: Failed to upload image"
       );
       res.status(500).json({ message: "Failed to upload image" });
