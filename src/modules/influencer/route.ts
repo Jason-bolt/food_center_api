@@ -2,12 +2,14 @@ import { Router } from "express";
 import influencerController from "./controller/controller";
 import influencerMiddleware from "./middleware/middleware";
 import tryCatchHelper from "../../../utils/tryCatchHelper";
+import authMiddleware from "../../middleware/auth";
 
 const influencerRouter = Router();
 
 influencerRouter.post(
   "/",
-  influencerMiddleware.validateInfluencer,
+  authMiddleware,
+  tryCatchHelper(influencerMiddleware.validateInfluencer),
   tryCatchHelper(influencerMiddleware.isUniqueInfluencerName),
   tryCatchHelper(influencerController.createInfluencer)
 );
@@ -18,16 +20,15 @@ influencerRouter.get(
 );
 influencerRouter.put(
   "/:id",
-  influencerMiddleware.validateInfluencer,
+  authMiddleware,
+  tryCatchHelper(influencerMiddleware.validateInfluencer),
   tryCatchHelper(influencerMiddleware.doesInfluencerExist),
   tryCatchHelper(influencerController.updateInfluencer)
 );
 influencerRouter.delete(
   "/:id",
+  authMiddleware,
   tryCatchHelper(influencerMiddleware.doesInfluencerExist),
   tryCatchHelper(influencerController.deleteInfluencer)
 );
-// influencerRouter.get("/:id/foods", tryCatchHelper(influencerController.getInfluencerFoods));
-// influencerRouter.get("/:id/videos", tryCatchHelper(influencerController.getInfluencerVideos));
-
 export default influencerRouter;

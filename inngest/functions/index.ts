@@ -9,77 +9,48 @@ const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
   { id: "update_influencer_food_youtube_details", retries: 3 },
   { event: "update_influencer_food_youtube_details.event" },
   async ({ event, step }) => {
-    try {
-      const validFoods = await step.run("check_if_foods_exist", async () => {
-        const validFoods: {
-          foodId: string;
-          videoUrls: string[];
-        }[] = [];
+    const validFoods = await step.run("check_if_foods_exist", async () => {
+      // Single query instead of one findById per food link
+      const foodIds = event.data.foodLinks.map(
+        (f: { foodId: string }) => f.foodId,
+      );
+      const foundFoods = await FoodModel.find({ _id: { $in: foodIds } });
+      const foundIds = new Set(foundFoods.map((f) => String(f._id)));
+      return (event.data.foodLinks as { foodId: string; videoUrls: string[] }[]).filter(
+        (fl) => foundIds.has(fl.foodId),
+      );
+    });
 
-        await Promise.all(
-          event.data.foodLinks.map(
-            async (foodLink: { foodId: string; videoUrls: string[] }) => {
-              const food = await FoodModel.findById(foodLink.foodId);
-              console.log("Food", food);
-              if (food) {
-                validFoods.push({
-                  foodId: foodLink.foodId,
-                  videoUrls: foodLink.videoUrls,
-                });
-              }
-            }
-          )
-        );
+    const influencer = await step.run("get_influencer", async () => {
+      const found = await InfluencerModel.findOne({
+        name: event.data.influencerName,
+      }).exec();
 
-        console.log("validFoods", validFoods);
-        return validFoods;
-      });
+      if (!found) throw new Error("Influencer not found");
 
-      const influencer = await step.run("get_influencer", async () => {
-        const influencer = await InfluencerModel.findOne({
-          name: event.data.influencerName,
-        }).exec();
+      return found;
+    });
 
-        if (!influencer) throw new Error("Influencer not found!");
+    await step.run("upsert_influencer_food_records", async () => {
+      const influencerId = influencer._id;
 
-        return influencer;
-      });
+      await Promise.all(
+        validFoods.map(async (validFood) => {
+          await Promise.all(
+            validFood.videoUrls.map(async (videoUrl: string) => {
+              const { thumbnailUrl, title, publishedAt, videoId } =
+                await getYoutubeVideoTitleAndThumbnail(videoUrl);
 
-      await step.run("update_influencer_food_youtube_details", async () => {
-        const influencerId = (influencer as { _id: string })?._id;
-        await Promise.all(
-          validFoods.map(async (validFood) => {
-            await Promise.all(
-              validFood.videoUrls.map(async (videoUrl: string) => {
-                const { thumbnailUrl, title, publishedAt, videoId } =
-                  await getYoutubeVideoTitleAndThumbnail(videoUrl);
-                console.log(thumbnailUrl, title, publishedAt, videoId);
+              logger.debug(
+                { videoId, title, influencerId },
+                "[Inngest]: Upserting InfluencerFood record",
+              );
 
-                const existingInfluncerFood = await InfluencerFoodModel.findOne(
-                  {
-                    food: validFood.foodId,
-                    influencer: influencerId,
-                    videoId,
-                  }
-                );
-
-                if (existingInfluncerFood) {
-                  await InfluencerFoodModel.findOneAndUpdate(
-                    existingInfluncerFood._id,
-                    {
-                      food: validFood.foodId,
-                      influencer: influencerId,
-                      videoUrl,
-                      videoId,
-                      videoTitle: title,
-                      videoThumbnailUrl: thumbnailUrl,
-                      videoPublishedAt: publishedAt,
-                    }
-                  );
-                  return;
-                }
-
-                const influencerFood = new InfluencerFoodModel({
+              // Single upsert replaces the manual findOne + branch, eliminating
+              // an extra round-trip and the TOCTOU race on concurrent retries.
+              await InfluencerFoodModel.findOneAndUpdate(
+                { food: validFood.foodId, influencer: influencerId, videoId },
+                {
                   food: validFood.foodId,
                   influencer: influencerId,
                   videoUrl,
@@ -87,24 +58,17 @@ const updateInfluencerFoodYoutubeDetails = inngest.createFunction(
                   videoTitle: title,
                   videoThumbnailUrl: thumbnailUrl,
                   videoPublishedAt: publishedAt,
-                });
-                await influencerFood.save();
-              })
-            );
-          })
-        );
-      });
+                },
+                { upsert: true, new: true },
+              );
+            }),
+          );
+        }),
+      );
+    });
 
-      return {
-        success: true,
-      };
-    } catch (error) {
-      logger.debug(error, "Error from influencer food youtube details.");
-      return {
-        success: false,
-      };
-    }
-  }
+    return { success: true };
+  },
 );
 
 export default [updateInfluencerFoodYoutubeDetails];

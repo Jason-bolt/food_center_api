@@ -23,7 +23,6 @@ class UploadController implements IController {
         resource_type: "image",
         folder: "food_center",
       });
-      console.log("IMAGE", image);
       if (!result) {
         logger.error(
           "[UploadController - uploadImage]: Failed to upload image - no result from Cloudinary"

@@ -31,7 +31,10 @@ class InfluencerMiddleware implements IMiddleware {
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const influencer = await InfluencerModel.findOne({ name: req.body?.name });
+    const escapedName = (req.body?.name ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const influencer = await InfluencerModel.findOne({
+      name: { $regex: new RegExp(`^${escapedName}$`, "i") },
+    });
     if (influencer) {
       logger.error(
         { influencerName: req.body?.name },

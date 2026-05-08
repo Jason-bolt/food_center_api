@@ -2,12 +2,14 @@ import { Router } from "express";
 import foodController from "./controller/controller";
 import foodMiddleware from "./middleware/middleware";
 import tryCatchHelper from "../../../utils/tryCatchHelper";
+import authMiddleware from "../../middleware/auth";
 
 const foodRouter = Router();
 
 foodRouter.post(
   "/",
-  foodMiddleware.validateFood,
+  authMiddleware,
+  tryCatchHelper(foodMiddleware.validateFood),
   tryCatchHelper(foodMiddleware.isUniqueFoodName),
   tryCatchHelper(foodController.createFood)
 );
@@ -23,7 +25,8 @@ foodRouter.get(
 );
 foodRouter.put(
   "/:id",
-  foodMiddleware.validateFood,
+  authMiddleware,
+  tryCatchHelper(foodMiddleware.validateFood),
   tryCatchHelper(foodMiddleware.doesFoodExist),
   tryCatchHelper(foodController.updateFood)
 );
@@ -39,6 +42,7 @@ foodRouter.get(
 );
 foodRouter.delete(
   "/:id",
+  authMiddleware,
   tryCatchHelper(foodMiddleware.doesFoodExist),
   tryCatchHelper(foodController.deleteFood)
 );

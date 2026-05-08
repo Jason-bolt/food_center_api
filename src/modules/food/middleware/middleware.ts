@@ -47,7 +47,10 @@ class FoodMiddleware implements IMiddleware {
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const food = await FoodModel.findOne({ name: req.body?.name });
+    const escapedName = (req.body?.name ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const food = await FoodModel.findOne({
+      name: { $regex: new RegExp(`^${escapedName}$`, "i") },
+    });
     if (food) {
       logger.error(
         { foodName: req.body?.name },

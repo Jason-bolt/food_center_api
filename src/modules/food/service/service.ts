@@ -52,12 +52,8 @@ class FoodService implements IService {
         whereClause.region = { $regex: region, $options: "i" };
       }
 
-      console.log(whereClause);
-      const foods = await FoodModel.find()
-        .skip(skip)
-        .limit(limit)
-        .where(whereClause);
-      const foodCount = await FoodModel.countDocuments();
+      const foods = await FoodModel.find(whereClause).skip(skip).limit(limit);
+      const foodCount = await FoodModel.countDocuments(whereClause);
 
       logger.info(
         { foodsCount: foods.length, totalItems: foodCount, page, limit },

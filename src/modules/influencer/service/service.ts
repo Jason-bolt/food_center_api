@@ -1,11 +1,9 @@
 import InfluencerModel, {
   InfluencerType,
 } from "../../../../config/db/models/InfluencerModel";
+import InfluencerFoodModel from "../../../../config/db/models/InfluencerFoodModel";
 import IService from "./Iservice";
-// import InfluencerFoodModel from "../../../../config/db/models/InfluencerFoodModel";
 import {
-  // InfluencerFoodType,
-  // InfluencerFoodVideoType,
   InsertInfluencerFoodType,
 } from "../../../../utils/types/InfluencerTypes";
 import inngest from "../../../../inngest";
@@ -121,9 +119,10 @@ class InfluencerService implements IService {
   deleteInfluencer = async (id: string) => {
     try {
       await InfluencerModel.findByIdAndDelete(id);
+      await InfluencerFoodModel.deleteMany({ influencer: id });
       logger.info(
         { influencerId: id },
-        "[InfluencerService - deleteInfluencer]: Successfully deleted influencer"
+        "[InfluencerService - deleteInfluencer]: Successfully deleted influencer and associated food records"
       );
     } catch (error) {
       logger.error(
@@ -134,15 +133,6 @@ class InfluencerService implements IService {
     }
   };
 
-  //   getInfluencerFoods = async (id: string) => {
-  //     const influencerFoods = await InfluencerFoodModel.find({ influencer: id });
-  //     return influencerFoods as InfluencerFoodType[];
-  //   };
-
-  //   getInfluencerVideos = async (id: string) => {
-  //     const influencerVideos = await InfluencerFoodModel.find({ influencer: id });
-  //     return influencerVideos as InfluencerFoodVideoType[];
-  //   };
 }
 
 const influencerService = new InfluencerService();
