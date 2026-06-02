@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import router from "./src/routes";
 import { connectDB } from "./config/db";
@@ -7,11 +10,8 @@ import cors from "cors";
 import { serve } from "inngest/express";
 import functions from "./inngest/functions";
 import inngest from "./inngest";
-import dotenv from "dotenv";
 import { rateLimit } from "express-rate-limit";
 import logger from "./utils/logger";
-
-dotenv.config();
 
 const app = express();
 

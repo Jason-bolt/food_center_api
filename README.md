@@ -1,429 +1,379 @@
 # Food Center API
 
-A comprehensive backend API for a food discovery platform that highlights the richness and diversity of African cuisine. It showcases foods across Africa and provides video recipes from top food influencers. Users can browse, search, and filter foods by country or region, and discover recipe videos from their favorite influencers.
+A Node.js/Express REST API for Food Center — an African food discovery platform with AI-powered recipe generation, user accounts, meal planning, ingredient pantry management, and gamification.
 
-### Status
-
-✅ **Active Development** - Core features implemented with background processing and video integration
+---
 
 ## Tech Stack
 
-- Node.js + Express (TypeScript)
-- MongoDB + Mongoose
-- Zod (validation)
-- Multer (file uploads)
-- Cloudinary (media hosting)
-- Helmet + CORS (security)
-- **Inngest** (background job processing)
-- **Redis** (caching)
-- **YouTube API** (video metadata extraction)
-- **Pino** (logging with pino-pretty)
-- **Express Rate Limit** (API rate limiting)
-- **ESLint** (code quality)
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js + Express 5 (TypeScript) |
+| Database | MongoDB + Mongoose |
+| Cache | Redis |
+| AI | Google Gemini 2.5 Flash (recipe generation) |
+| Images | Cloudinary (upload + storage) |
+| Background jobs | Inngest |
+| Email | Mailgun |
+| Video metadata | YouTube Data API v3 |
+| Auth | JWT (jsonwebtoken) + bcryptjs |
+| Validation | Zod |
+| Security | Helmet, CORS, express-rate-limit |
+| Logging | Pino + pino-pretty |
+| Uploads | Multer |
+
+---
+
+## Features
+
+### Food Catalogue
+- Full CRUD for food items (admin-key protected writes)
+- Paginated listing with search (name), country, and region filters
+- Redis-cached reads with automatic invalidation on write
+- Per-food influencer and video listings
+
+### Influencer & Video Management
+- Full CRUD for food influencers (admin-key protected writes)
+- Links influencers to foods with associated YouTube video URLs
+- **Inngest background job** fetches video metadata (title, thumbnail, publish date) from the YouTube API asynchronously on influencer creation — no blocking, 3 automatic retries
+
+### User Accounts & Auth
+- Email/password registration with bcrypt hashing
+- JWT-based authentication (`Authorization: Bearer <token>`, 7-day expiry)
+- `GET /auth/me` to hydrate the client with the current user + stats
+- Mailgun welcome email sent on registration (fire-and-forget)
+
+### AI Chef — Recipe Generation
+- `POST /recipes/suggest` streams Gemini-generated recipes over SSE
+  - Accepts up to 20 ingredients
+  - Suggests 2–3 recipes with steps, difficulty, time, and serving size
+  - Tighter per-IP rate limit (10 requests / 15 min) to control AI costs
+  - Optional JWT — logs the generate event to user stats when authenticated
+- `POST /recipes/images` — Cloudinary image generation for recipe cards (5 requests / 15 min)
+
+### Saved Recipes & Collections
+- Save any AI-generated recipe to a named collection
+- Collections: create, rename, delete
+- Recipes: save, list (by collection), move between collections, delete
+- All endpoints JWT-protected; awards XP and updates streak on save
+
+### Meal Planner
+- Weekly meal plan per user (indexed by Monday of the week)
+- `GET /meal-plan` — fetch current or any week's plan
+- `PUT /meal-plan/slot` — assign a saved recipe to a day slot
+- `DELETE /meal-plan/slot` — clear a slot
+- Completing all 7 days of a week awards a one-time +50 XP bonus (idempotent — tracked by week key)
+
+### Ingredient Pantry
+- Per-user persistent ingredient list
+- `GET /pantry` — fetch pantry
+- `PUT /pantry` — replace entire list
+- `POST /pantry/ingredient` — add a single ingredient
+- `DELETE /pantry/ingredient` — remove a single ingredient
+
+### Trending Ingredients
+- Every `/recipes/suggest` call atomically increments each ingredient's score in a Redis sorted set keyed by ISO week (`trending:ingredients:{YYYY-Www}`)
+- 2-week TTL — data expires automatically
+- `GET /trending` — returns the top 10 ingredients for the current week
+
+### Gamification & Streaks
+- `UserStats` embedded in every user document:
+  - `currentStreak` / `longestStreak` — consecutive active days
+  - `lastActiveDate` — YYYY-MM-DD (UTC)
+  - `totalRecipesGenerated` / `totalRecipesSaved`
+  - `xp` — cumulative experience points
+  - `completedWeeks` — week keys where the full-plan bonus was already awarded
+- XP awards: **+10** generate · **+20** save · **+50** full week (once per week)
+- Streak logic: increments on a new calendar day, resets to 1 if a day is skipped
+- All stat updates are a single atomic MongoDB aggregation-pipeline update — no read-modify-write race conditions
+
+### File Uploads
+- `POST /upload` — multipart image upload via Multer → Cloudinary; returns `secure_url`
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js >= 18
-- MongoDB database (Atlas or local)
-- Cloudinary account (for media uploads)
-- Redis server (for caching)
-- Google YouTube API key (for video metadata)
+- Node.js ≥ 18
+- MongoDB (Atlas or local)
+- Redis (local or managed, e.g. Upstash)
+- Cloudinary account
+- Google Cloud project with YouTube Data API v3 and Gemini API enabled
+- Mailgun account (for welcome emails)
+- Inngest account or local Inngest CLI (for background jobs)
 
 ### Installation
 
 ```bash
+cd food_center_api
 npm install
 ```
 
 ### Environment Variables
 
-Create a `.env` file in the project root with the following variables:
+Copy `.env.example` to `.env` and fill in every value:
 
-**Required variables:**
+```env
+# Database
+MONGODB_URI=mongodb+srv://...
 
-- `MONGODB_URI` – MongoDB connection string
-- `CLOUDINARY_CLOUD_NAME` – Cloudinary cloud name
-- `CLOUDINARY_API_KEY` – Cloudinary API key
-- `CLOUDINARY_API_SECRET` – Cloudinary API secret
-- `REDIS_URL` – Redis connection string
-- `GOOGLE_YOUTUBE_API_KEY` – YouTube API key for video metadata
+# Redis
+REDIS_URL=redis://...
 
-**Optional variables:**
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
 
-- `NODE_ENV` – Environment mode (`development` or `production`, defaults to `development`)
-  - Set to `development` for debug-level logging and development features
-  - Set to `production` for info-level logging
+# Google APIs
+GOOGLE_YOUTUBE_API_KEY=
+GEMINI_API_KEY=
 
-Cloudinary is configured in `config/cloudinary/index.ts`, MongoDB is initialized in `config/db/index.ts`, and Redis is configured in `utils/services/redis.ts`.
+# Auth
+JWT_SECRET=                          # long random secret
+API_SECRET=                          # admin API key for food/influencer writes
 
-### Running the project
+# Mailgun
+MAILGUN_API_KEY=
+MAILGUN_DOMAIN=
+MAILGUN_FROM=Food Center <noreply@yourdomain.com>
+MAILGUN_REGION=us                    # or eu
 
-- Development (nodemon + ts-node):
+# App
+NODE_ENV=development
+ALLOWED_ORIGINS=http://localhost:5173  # comma-separated in production
+CLIENT_URL=http://localhost:5173       # used in email links
+```
+
+### Running
 
 ```bash
+# Development — nodemon + ts-node with auto-reload
 npm run dev
-```
 
-- Build TypeScript:
-
-```bash
+# TypeScript compile check
 npm run build
-```
 
-- Start Inngest Dev Server (for background jobs):
-
-```bash
+# Start Inngest dev server (separate terminal, needed for background jobs)
 npm run inngest:start
-```
 
-- Run ESLint:
-
-```bash
+# Lint
 npm run lint
+npm run lint:fix
 ```
 
-The server starts on port `3000` by default. Base path for APIs: `/api/v1`. Inngest dev server runs on port `8288`.
+The API server listens on **port 3000**. Base path: `/api/v1`.  
+The Inngest dev server runs on **port 8288**.
+
+---
+
+## API Reference
+
+Base URL: `http://localhost:3000/api/v1`
+
+All write endpoints that are admin-only require the header `x-api-key: <API_SECRET>`.  
+All user endpoints that are auth-required need `Authorization: Bearer <JWT>`.
+
+### Authentication — `/auth`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/register` | — | Register; returns `{ token, user }` |
+| POST | `/auth/login` | — | Login; returns `{ token, user }` |
+| GET | `/auth/me` | JWT | Return current user with stats |
+
+### Foods — `/foods`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/foods` | — | Paginated list. Query: `page`, `limit`, `search`, `country`, `region` |
+| GET | `/foods/all/items/nonpaginated` | — | All foods, no pagination |
+| GET | `/foods/:id` | — | Single food |
+| POST | `/foods` | Admin key | Create food |
+| PUT | `/foods/:id` | Admin key | Update food |
+| DELETE | `/foods/:id` | Admin key | Delete food + related InfluencerFood records |
+| GET | `/foods/:id/influencers` | — | Influencers linked to this food |
+| GET | `/foods/:id/videos` | — | Videos linked to this food |
+
+### Influencers — `/influencers`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/influencers` | — | All influencers (Redis-cached) |
+| GET | `/influencers/:id` | — | Single influencer |
+| POST | `/influencers` | Admin key | Create influencer + trigger YouTube background job |
+| PUT | `/influencers/:id` | Admin key | Update influencer |
+| DELETE | `/influencers/:id` | Admin key | Delete influencer + related records |
+
+### AI Recipes — `/recipes`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/recipes/suggest` | Optional JWT | Stream SSE recipe suggestions. Body: `{ ingredients: string[] }` |
+| POST | `/recipes/images` | — | Generate Cloudinary images for recipes. Body: `{ recipes: [{ name, region }] }` |
+
+Rate limits: `/suggest` — 10 req / 15 min; `/images` — 5 req / 15 min (per IP, in addition to the global 1000 req / 15 min limit).
+
+### Saved Recipes — `/saved-recipes` *(JWT required)*
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/saved-recipes` | List saved recipes. Query: `collectionId` (or `none`) |
+| POST | `/saved-recipes` | Save a recipe. Body: `{ title, region, markdown, imageUrl?, collectionId? }` |
+| DELETE | `/saved-recipes/:id` | Delete a saved recipe |
+| PUT | `/saved-recipes/:id/collection` | Move recipe to a different collection |
+| GET | `/saved-recipes/collections` | List collections |
+| POST | `/saved-recipes/collections` | Create collection. Body: `{ name }` |
+| PUT | `/saved-recipes/collections/:id` | Rename collection |
+| DELETE | `/saved-recipes/collections/:id` | Delete collection |
+
+### Meal Plan — `/meal-plan` *(JWT required)*
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/meal-plan` | Fetch meal plan. Query: `weekStart` (ISO date, optional — defaults to current week) |
+| PUT | `/meal-plan/slot` | Assign a recipe to a day slot |
+| DELETE | `/meal-plan/slot` | Clear a day slot |
+
+### Pantry — `/pantry` *(JWT required)*
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/pantry` | Fetch the user's pantry ingredient list |
+| PUT | `/pantry` | Replace the entire list. Body: `{ ingredients: string[] }` |
+| POST | `/pantry/ingredient` | Add one ingredient. Body: `{ ingredient: string }` |
+| DELETE | `/pantry/ingredient` | Remove one ingredient. Body: `{ ingredient: string }` |
+
+### Trending — `/trending`
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/trending` | Top 10 trending ingredients for the current week |
+
+### Upload — `/upload`
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/upload` | `multipart/form-data` with field `imageUrl`. Returns Cloudinary `secure_url` |
+
+---
+
+## Data Models
+
+### User
+```
+name, email, password (hashed), plan (free|pro), createdAt
+stats: {
+  currentStreak, longestStreak, lastActiveDate,
+  totalRecipesGenerated, totalRecipesSaved,
+  xp, completedWeeks[]
+}
+```
+
+### Food
+```
+name, countries[], region, culturalStory, description, imageUrl, ingredients[], createdAt, updatedAt
+```
+
+### Influencer
+```
+name, description, imageUrl, instagram, youtube, tiktok, facebook, twitter, snapchat, linkedin, website, createdAt, updatedAt
+```
+
+### InfluencerFood *(junction)*
+```
+influencer (ref), food (ref), videoUrl, videoId, videoTitle, videoThumbnailUrl, videoPublishedAt
+```
+
+### SavedRecipe
+```
+userId (ref), collectionId (ref, nullable), title, region, markdown, imageUrl, createdAt
+```
+
+### Collection
+```
+userId (ref), name, createdAt
+```
+
+### MealPlan
+```
+userId (ref), weekStart (Monday UTC midnight), slots[]: { day 0–6, savedRecipeId, title, region, imageUrl, ingredients[] }
+```
+
+### Pantry
+```
+userId (ref, unique), ingredients[], updatedAt
+```
+
+---
 
 ## Project Structure
 
 ```
-/ (repo root)
-├─ index.ts                       # App bootstrap, middleware, route mounting
-├─ config/
-│  ├─ db/                         # DB connection and Mongoose models
-│  │  ├─ index.ts
-│  │  └─ models/
-│  │     ├─ FoodModel.ts
-│  │     ├─ InfluencerModel.ts
-│  │     └─ InfluencerFoodModel.ts
-│  ├─ cloudinary/
-│  │  └─ index.ts                 # Cloudinary configuration
-│  └─ zod/
-│     └─ schemas/
-│        ├─ food.ts               # Food validation schemas
-│        └─ influencer.ts         # Influencer validation schemas
-├─ inngest/                       # Background job processing
-│  ├─ index.ts                   # Inngest client configuration
-│  └─ functions/
-│     └─ index.ts                # Background job functions
-├─ src/
-│  ├─ routes/
-│  │  └─ index.ts                 # Aggregates module routes under /api/v1
-│  └─ modules/
-│     ├─ food/                   # Food management module
-│     │  ├─ route.ts
-│     │  ├─ controller/
-│     │  │  ├─ controller.ts
-│     │  │  └─ Icontroller.ts
-│     │  ├─ middleware/
-│     │  │  ├─ middleware.ts
-│     │  │  └─ Imiddleware.ts
-│     │  └─ service/
-│     │     ├─ service.ts
-│     │     └─ Iservice.ts
-│     ├─ influencer/             # Influencer management module
-│     │  ├─ route.ts
-│     │  ├─ controller/
-│     │  │  ├─ controller.ts
-│     │  │  └─ Icontroller.ts
-│     │  ├─ middleware/
-│     │  │  ├─ middleware.ts
-│     │  │  └─ Imiddleware.ts
-│     │  └─ service/
-│     │     ├─ service.ts
-│     │     └─ Iservice.ts
-│     └─ upload/                 # File upload module
-│        ├─ route.ts
-│        ├─ controller/
-│        │  ├─ controller.ts
-│        │  └─ Icontroller.ts
-│        └─ middleware.ts
-├─ utils/
-│  ├─ services/
-│  │  ├─ helpers.ts              # Utility functions (YouTube ID extraction)
-│  │  ├─ redis.ts                # Redis client and operations
-│  │  └─ youtube.ts              # YouTube API integration
-│  ├─ tryCatchHelper.ts          # Error handling wrapper
-│  ├─ logger.ts                  # Pino logger configuration
-│  └─ types/
-│     ├─ FoodTypes.ts            # Food type definitions
-│     └─ InfluencerTypes.ts      # Influencer type definitions
-├─ eslint.config.mts            # ESLint configuration
-└─ tsconfig.json
+food_center_api/
+├── index.ts                        # Bootstrap: middleware, routes, DB/Redis connect
+├── config/
+│   ├── cloudinary/index.ts         # Cloudinary SDK config
+│   └── db/
+│       ├── index.ts                # Mongoose connect
+│       └── models/                 # All Mongoose models
+├── inngest/
+│   ├── index.ts                    # Inngest client
+│   └── functions/index.ts          # Background jobs (YouTube metadata fetch)
+├── src/
+│   ├── routes/index.ts             # Mounts all module routers under /api/v1
+│   ├── middleware/
+│   │   ├── auth.ts                 # Admin x-api-key guard
+│   │   ├── userAuth.ts             # JWT user guard
+│   │   └── optionalUserAuth.ts     # JWT attach if present (no 401 if absent)
+│   └── modules/
+│       ├── auth/                   # Register, login, /me
+│       ├── food/                   # Food CRUD + filtering
+│       ├── influencer/             # Influencer CRUD + Inngest trigger
+│       ├── upload/                 # Cloudinary file upload
+│       ├── recipes/                # Gemini SSE stream + image generation
+│       ├── savedRecipes/           # Saved recipes + collections
+│       ├── mealPlan/               # Weekly meal planning
+│       ├── pantry/                 # Per-user ingredient pantry
+│       └── trending/               # Redis-backed trending ingredients
+└── utils/
+    ├── logger.ts                   # Pino logger
+    ├── tryCatchHelper.ts           # Async error wrapper
+    └── services/
+        ├── redis.ts                # Redis client + helpers
+        ├── stats.ts                # Atomic user stats updater
+        ├── mailgun.ts              # Transactional email
+        └── youtube.ts              # YouTube metadata fetch
 ```
 
-## API
+---
 
-Base URL: `http://localhost:3000/api/v1`
+## Security
 
-### Foods
-
-- **GET `/foods`** (Paginated)
-  - Query parameters:
-    - `page` (number, default: 1) - Page number
-    - `limit` (number, default: 10) - Items per page
-    - `search` (string, optional) - Search by food name
-    - `country` (string, optional) - Filter by country
-    - `region` (string, optional) - Filter by region
-  - Response: `{ foods: Food[], totalpages: number, page: number, totalItems: number }`
-  - Cached in Redis for performance
-
-- **GET `/foods/all/items/nonpaginated`** (Non-paginated)
-  - Returns all foods without pagination (useful for dropdowns/selects)
-  - Response: `Food[]`
-  - Cached in Redis
-
-- **GET `/foods/:id`**
-  - Get a single food by MongoDB ObjectId
-  - Response: `Food` object
-  - Returns 404 if food doesn't exist
-
-- **POST `/foods`**
-  - Body: JSON object with required fields:
-    - `name` (string, min 1 char) - Food name
-    - `country` (string, min 1 char) - Country of origin
-    - `region` (string, min 1 char) - Region within country
-    - `culturalStory` (string, min 1 char) - Cultural background story
-    - `description` (string, min 1 char) - Food description
-    - `imageUrl` (string, min 1 char) - Image URL (use `/upload` endpoint)
-    - `ingredients` (string[], min 1 item) - Array of ingredient names
-  - Validates uniqueness of food name
-  - Response: Created `Food` object (201 status)
-  - Invalidates related Redis cache
-
-- **PUT `/foods/:id`**
-  - Body: Partial JSON object with any `Food` fields
-  - Updates existing food
-  - Validates food exists before update
-  - Response: Updated `Food` object
-  - Invalidates related Redis cache
-
-- **DELETE `/foods/:id`**
-  - Deletes a food by ID
-  - Also deletes associated `InfluencerFood` relationships
-  - Validates food exists before deletion
-  - Response: Success message
-  - Invalidates related Redis cache
-
-- **GET `/foods/:id/influencers`**
-  - List all influencers associated with a specific food
-  - Response: Array of influencer objects
-
-- **GET `/foods/:id/videos`**
-  - List all recipe videos associated with a specific food
-  - Response: Array of video objects with metadata (title, thumbnail, URL, publish date)
-
-### Influencers
-
-- **GET `/influencers`**
-  - List all influencers (non-paginated)
-  - Response: Array of `Influencer` objects
-  - Cached in Redis
-
-- **GET `/influencers/:id`**
-  - Get a single influencer by MongoDB ObjectId
-  - Response: `Influencer` object with populated data
-  - Returns 404 if influencer doesn't exist
-  - Cached in Redis
-
-- **POST `/influencers`**
-  - Body: JSON object with required and optional fields:
-    - `name` (string, min 1 char, required) - Influencer name
-    - `description` (string, min 1 char, required) - Influencer description
-    - `imageUrl` (string, optional) - Profile image URL
-    - `instagram`, `youtube`, `tiktok`, `facebook`, `twitter`, `snapchat`, `linkedin`, `website` (string, optional) - Social media links
-    - `foodLinks` (array, required) - Array of objects with:
-      - `foodId` (string, min 1 char) - MongoDB ObjectId of existing food
-      - `videoUrls` (string[], min 1 item) - Array of YouTube video URLs
-  - Validates uniqueness of influencer name
-  - Validates that all foodIds exist
-  - Creates influencer and triggers Inngest background job to process YouTube videos
-  - Background job extracts video metadata (title, thumbnail, publish date) and creates `InfluencerFood` records
-  - Response: Created `Influencer` object (201 status)
-  - Invalidates related Redis cache
-
-- **PUT `/influencers/:id`**
-  - Body: Partial JSON object with any `Influencer` fields
-  - Updates existing influencer
-  - Validates influencer exists before update
-  - Response: Updated `Influencer` object
-  - Invalidates related Redis cache
-
-- **DELETE `/influencers/:id`**
-  - Deletes an influencer by ID
-  - Also deletes associated `InfluencerFood` relationships
-  - Validates influencer exists before deletion
-  - Response: Success message
-  - Invalidates related Redis cache
-
-### Uploads
-
-- **POST `/upload`**
-  - Content-Type: `multipart/form-data`
-  - Body: Form data with field name `imageUrl` containing a single image file
-  - Uploads image to Cloudinary
-  - Response: Cloudinary upload information including:
-    - `secure_url` - HTTPS URL for the uploaded image
-    - `public_id` - Cloudinary public ID
-    - `format`, `width`, `height`, `bytes` - Image metadata
-  - Use the returned `secure_url` as the `imageUrl` field when creating foods or influencers
-
-## Background Jobs (Inngest)
-
-The platform uses **Inngest** for asynchronous background job processing:
-
-- **Inngest Endpoint**: `/api/inngest` - Webhook endpoint for Inngest to trigger functions
-- **YouTube Video Processing**: 
-  - Triggered automatically when an influencer is created with `foodLinks` containing YouTube URLs
-  - Background job (`update_influencer_food_youtube_details`) processes videos asynchronously:
-    1. Validates that all food IDs exist in the database
-    2. Retrieves the created influencer by name
-    3. For each food-video combination:
-       - Extracts YouTube video ID from URL
-       - Calls YouTube API to fetch metadata (title, thumbnail, publish date)
-       - Creates `InfluencerFood` record with video metadata
-  - **Error Handling**: 
-    - Automatic retry logic (3 retries) for transient failures
-    - Graceful error handling with step-by-step execution
-    - Failed jobs can be inspected in Inngest dashboard
-- **Development**: Run `npm run inngest:start` to start Inngest dev server (port 8288)
-- **Production**: Configure Inngest sync URL in your Inngest dashboard
-
-## Data Models
-
-### Food Model
-Core entity representing a dish from African cuisine:
-- `name` (String, required) - Food name (must be unique)
-- `country` (String, required) - Country of origin
-- `region` (String, required) - Region within the country
-- `culturalStory` (String, required) - Cultural background and history
-- `description` (String, required) - Food description
-- `imageUrl` (String, required) - URL to food image (Cloudinary)
-- `ingredients` (String[], required) - Array of ingredient names
-- `createdAt` (Date, auto) - Creation timestamp
-- `updatedAt` (Date, auto) - Last update timestamp
-
-### Influencer Model
-Represents a food content creator or chef:
-- `name` (String, required) - Influencer name (must be unique)
-- `description` (String, required) - Influencer bio/description
-- `imageUrl` (String, optional) - Profile image URL
-- `instagram`, `youtube`, `tiktok`, `facebook`, `twitter`, `snapchat`, `linkedin`, `website` (String, optional) - Social media links
-- `createdAt` (Date, auto) - Creation timestamp
-- `updatedAt` (Date, auto) - Last update timestamp
-
-### InfluencerFood Model
-Junction table linking foods to influencers with video metadata:
-- `influencer` (ObjectId, ref: Influencer, required) - Reference to influencer
-- `food` (ObjectId, ref: Food, required) - Reference to food
-- `videoUrl` (String, required) - YouTube video URL
-- `videoId` (String, required) - Extracted YouTube video ID
-- `videoTitle` (String, required) - Video title from YouTube API
-- `videoThumbnailUrl` (String, required) - Video thumbnail URL from YouTube API
-- `videoPublishedAt` (Date, required) - Video publish date from YouTube API
-- `createdAt` (Date, auto) - Creation timestamp
-- `updatedAt` (Date, auto) - Last update timestamp
-
-See `config/db/models/*` for actual Mongoose schemas and `utils/types/*.ts` for TypeScript type definitions.
-
-## Validation
-
-- **Zod schemas** in `config/zod/schemas/` for request validation:
-  - `food.ts` - Validates food creation/update requests
-  - `influencer.ts` - Validates influencer creation/update requests
-- **Request validation middleware** in respective module middleware files:
-  - Validates request body against Zod schemas before processing
-  - Returns 400 status with validation errors if invalid
-- **Business logic validation**:
-  - Uniqueness checks for food names and influencer names
-  - Existence checks before update/delete operations
-  - Food ID validation when creating influencer-food relationships
-- **TypeScript interfaces** in `utils/types/` for type safety:
-  - `FoodTypes.ts` - Food type definitions
-  - `InfluencerTypes.ts` - Influencer and InfluencerFood type definitions
-
-## Caching & Performance
-
-- **Redis Integration**: 
-  - Caching layer for frequently accessed data
-  - Cache keys include: `foods:*`, `influencers:*`, `influencers:unpaginated`
-  - Default TTL: 10 seconds (configurable in `utils/services/redis.ts`)
-  - Cache invalidation on create/update/delete operations
-  - Automatic cache refresh on cache miss
-
-- **Background Processing**: 
-  - Heavy operations (YouTube API calls) handled asynchronously via Inngest
-  - Prevents blocking of API requests during video metadata extraction
-  - Automatic retry logic (3 retries) for failed jobs
-
-- **Error Handling**: 
-  - Comprehensive error handling with `tryCatchHelper` wrapper
-  - Structured error responses
-  - Pino logger integration for error tracking
-
-## Security & Middleware
-
-- `helmet` and `cors` enabled globally
-- `express.json` and `express.urlencoded` enabled
-- **Rate limiting** enabled globally (100 requests per 15 minutes per IP)
-- **Pino logger** for structured logging with environment-based log levels
+- **Helmet** — sets secure HTTP headers
+- **CORS** — restricted to `ALLOWED_ORIGINS` in production, open in development
+- **Global rate limit** — 1000 requests / 15 min per IP
+- **AI endpoint rate limits** — tighter limits on `/recipes/suggest` (10/15 min) and `/recipes/images` (5/15 min)
+- **Admin routes** — protected by `x-api-key` header
+- **User routes** — protected by JWT; tokens expire after 7 days
+- **Password hashing** — bcrypt with cost factor 12
 
 ## Logging
 
-The application uses **Pino** for structured logging:
+Pino structured logging throughout:
+- **Development** — `debug` level, pretty-printed via `pino-pretty`
+- **Production** — `info` level, JSON output
 
-- **Development mode** (`NODE_ENV=development`): Debug-level logging with `pino-pretty` for readable console output
-- **Production mode** (`NODE_ENV=production`): Info-level logging for performance
-- Logs include contextual information (request IDs, operation details, error stacks)
-- Logger is available via `utils/logger.ts` and used throughout controllers and services
-- Structured logging format enables easy parsing and analysis
+## Background Jobs
 
-## Scripts
+Inngest handles async work that would block the request cycle:
 
-- `dev` – start development server with `nodemon` and `ts-node` (auto-reload on file changes)
-- `build` – compile TypeScript to `dist` directory
-- `inngest:start` – start Inngest dev server for background job processing (runs on port 8288)
-- `lint` – run ESLint for code quality checks
-- `lint:fix` – run ESLint and automatically fix fixable issues
+| Function | Trigger | What it does |
+|---|---|---|
+| `update_influencer_food_youtube_details` | Influencer create | Fetches YouTube video title, thumbnail, and publish date for each food-video link; upserts `InfluencerFood` records |
 
-## Contributing
-
-1. Fork and clone the repository
-2. Create a feature branch
-3. Install dependencies: `npm install`
-4. Set up `.env`
-5. Run locally: `npm run dev`
-6. Open a PR with a clear description and screenshots where relevant
-
-## Features Implemented ✅
-
-- ✅ Food CRUD operations with pagination
-- ✅ Food filtering by country/region and text search
-- ✅ Influencer CRUD operations
-- ✅ YouTube video metadata extraction
-- ✅ Background job processing with Inngest
-- ✅ Redis caching integration
-- ✅ File uploads to Cloudinary
-- ✅ Comprehensive error handling
-- ✅ TypeScript type safety
-- ✅ ESLint code quality checks
-- ✅ **Pino structured logging** with environment-based levels
-- ✅ **API rate limiting** (100 requests per 15 minutes)
-
-## Roadmap
-
-- 🔄 Authentication for admin curation
-- 🔄 Advanced search and filtering
-- 🔄 Video thumbnail optimization
-- 🔄 API documentation with Swagger
-- 🔄 Unit and integration tests
-- 🔄 Docker containerization
-- 🔄 CI/CD pipeline setup
-- 🔄 Request logging middleware
-- 🔄 Health check endpoints
-
-## License
-
-ISC
+- 3 automatic retries on failure
+- Inspect and replay jobs in the Inngest dashboard
+- Run `npm run inngest:start` in a separate terminal during development
