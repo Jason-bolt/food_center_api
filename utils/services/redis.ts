@@ -31,6 +31,30 @@ export const deleteRedisData = async (key: string): Promise<void> => {
   await redisClient.del(key);
 };
 
+// ─── Sorted-set helpers (used by trending) ────────────────────────────────────
+
+/** Increment a sorted-set member's score by `increment`. */
+export const zIncrBy = async (
+  key: string,
+  increment: number,
+  member: string,
+): Promise<void> => {
+  await redisClient.zIncrBy(key, increment, member);
+};
+
+/** Expire a key after `ttlSeconds` seconds. */
+export const expireKey = async (key: string, ttlSeconds: number): Promise<void> => {
+  await redisClient.expire(key, ttlSeconds);
+};
+
+/** Return the top `count` members of a sorted set, highest score first. */
+export const zTopWithScores = async (
+  key: string,
+  count: number,
+): Promise<{ value: string; score: number }[]> => {
+  return redisClient.zRangeWithScores(key, 0, count - 1, { REV: true });
+};
+
 /** Deletes all keys matching a glob pattern using SCAN (non-blocking). */
 export const deleteRedisByPattern = async (pattern: string): Promise<void> => {
   let count = 0;
