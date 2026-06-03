@@ -55,6 +55,22 @@ export const zTopWithScores = async (
   return redisClient.zRangeWithScores(key, 0, count - 1, { REV: true });
 };
 
+/**
+ * Increment a counter key and set it to expire at the next UTC midnight (first
+ * increment only — subsequent calls just increment without resetting the TTL).
+ * Returns the new count.
+ */
+export const incrExpireAtMidnight = async (key: string): Promise<number> => {
+  const count = await redisClient.incr(key);
+  if (count === 1) {
+    const now = new Date();
+    const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    const ttl = Math.floor((midnight.getTime() - now.getTime()) / 1000);
+    await redisClient.expire(key, ttl);
+  }
+  return count;
+};
+
 /** Deletes all keys matching a glob pattern using SCAN (non-blocking). */
 export const deleteRedisByPattern = async (pattern: string): Promise<void> => {
   let count = 0;

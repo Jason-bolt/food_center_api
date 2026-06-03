@@ -10,12 +10,13 @@ const signToken = (userId: string, plan: string) =>
   jwt.sign({ userId, plan }, JWT_SECRET, { expiresIn: "7d" });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const safeUser = (user: { _id: unknown; name: string; email: string; plan: string; stats?: any }) => ({
-  _id:   user._id,
-  name:  user.name,
-  email: user.email,
-  plan:  user.plan,
-  stats: user.stats ?? {}, // always include stats so the client never receives a zeroed default
+const safeUser = (user: { _id: unknown; name: string; email: string; plan: string; credits?: number; stats?: any }) => ({
+  _id:     user._id,
+  name:    user.name,
+  email:   user.email,
+  plan:    user.plan,
+  credits: user.credits ?? 0,
+  stats:   user.stats ?? {}, // always include stats so the client never receives a zeroed default
 });
 
 class AuthService {
