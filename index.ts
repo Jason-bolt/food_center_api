@@ -28,6 +28,8 @@ const limiter = rateLimit({
 });
 
 app.use(limiter);
+// Raw body required for Stripe webhook signature verification — must precede express.json()
+app.use("/api/v1/billing/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(

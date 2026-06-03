@@ -5,6 +5,7 @@ import recipeController from "./controller/controller";
 import recipeImageController from "./controller/imageController";
 import tryCatchHelper from "../../../utils/tryCatchHelper";
 import { optionalUserAuthMiddleware } from "../../middleware/optionalUserAuth";
+import { freemiumCheckMiddleware } from "../../middleware/freemiumCheck";
 
 const recipesRouter = Router();
 
@@ -63,7 +64,8 @@ const validateRecipes = (
 recipesRouter.post(
   "/suggest",
   recipesLimiter,
-  optionalUserAuthMiddleware, // attaches userId if a valid token is present
+  optionalUserAuthMiddleware,    // attaches userId/plan if a valid token is present
+  freemiumCheckMiddleware,       // enforces 3 generations/day for free users
   validateIngredients,
   tryCatchHelper(recipeController.suggestRecipes),
 );
