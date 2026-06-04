@@ -13,7 +13,7 @@ class FoodMiddleware implements IMiddleware {
     const result = createFoodSchema.safeParse(req.body);
     if (!result.success) {
       logger.error(req.body, "[FoodMiddleware - validateFood]: Bad food data");
-      res.status(400).json({ error: result.error.message });
+      res.status(400).json({ error: result.error.issues[0].message });
       return;
     }
 

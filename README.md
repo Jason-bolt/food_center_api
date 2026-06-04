@@ -1,6 +1,6 @@
 # Food Center API
 
-A Node.js/Express REST API for Food Center — an African food discovery platform with AI-powered recipe generation, user accounts, meal planning, ingredient pantry management, and gamification.
+A Node.js/Express REST API for Food Center — an African food discovery platform with AI-powered recipe generation, freemium billing, user accounts, meal planning, ingredient pantry management, and gamification.
 
 ---
 
@@ -17,6 +17,7 @@ A Node.js/Express REST API for Food Center — an African food discovery platfor
 | Email | Mailgun |
 | Video metadata | YouTube Data API v3 |
 | Auth | JWT (jsonwebtoken) + bcryptjs |
+| Billing | Stripe (subscriptions + one-time payments) |
 | Validation | Zod |
 | Security | Helmet, CORS, express-rate-limit |
 | Logging | Pino + pino-pretty |
@@ -40,16 +41,34 @@ A Node.js/Express REST API for Food Center — an African food discovery platfor
 ### User Accounts & Auth
 - Email/password registration with bcrypt hashing
 - JWT-based authentication (`Authorization: Bearer <token>`, 7-day expiry)
-- `GET /auth/me` to hydrate the client with the current user + stats
+- `GET /auth/me` to hydrate the client with the current user, stats, and credit balance
 - Mailgun welcome email sent on registration (fire-and-forget)
 
 ### AI Chef — Recipe Generation
-- `POST /recipes/suggest` streams Gemini-generated recipes over SSE
-  - Accepts up to 20 ingredients
-  - Suggests 2–3 recipes with steps, difficulty, time, and serving size
-  - Tighter per-IP rate limit (10 requests / 15 min) to control AI costs
+- `POST /recipes/suggest` streams Gemini-generated recipes over **SSE (Server-Sent Events)**
+  - Accepts up to 20 ingredients; suggests 2–3 recipes with steps
+  - **Premium tier** (Pro users): extended prompt includes chef's tips, plating guide, wine/drink pairing, and nutritional info per serving — emitted as `{ mode: "premium" }` at stream start
+  - **Standard tier** (free/guest users): concise, practical recipes
+  - Per-user daily cap for free users enforced via Redis (see Freemium below)
   - Optional JWT — logs the generate event to user stats when authenticated
-- `POST /recipes/images` — Cloudinary image generation for recipe cards (5 requests / 15 min)
+- `POST /recipes/images` — Cloudinary image generation for recipe cards (5 req / 15 min)
+
+### Freemium Usage Caps
+- **Free users**: 3 AI recipe generations per day, tracked per `userId` in Redis (`ratelimit:recipes:{userId}:{YYYY-MM-DD}`) with automatic midnight UTC reset
+- **Credits**: if the daily cap is hit, 1 credit is spent atomically (MongoDB `$inc` with `$gt: 0` guard) before blocking — no race conditions
+- **Pro users**: unlimited generations, bypass the cap entirely
+- **Guests**: covered by the existing IP-based rate limiter (10 req / 15 min)
+- Returns `429 daily_limit_reached` when both the daily cap and credits are exhausted
+
+### Billing — Stripe
+- `POST /billing/checkout` — creates a Stripe Checkout session for the Pro monthly subscription
+- `POST /billing/credits` — creates a one-time Stripe Checkout session for a 10-credit pack ($1.99)
+- `POST /billing/portal` — opens the Stripe Customer Portal for subscription management
+- `POST /billing/webhook` — handles Stripe events:
+  - `checkout.session.completed` with `metadata.type === "credits"` → adds 10 credits to the user
+  - `customer.subscription.created/updated` → sets `plan: "pro"` or `"free"` based on subscription status
+  - `customer.subscription.deleted` → downgrades user to `plan: "free"`
+- Raw body preserved for the webhook route (registered before `express.json()`) for Stripe signature verification
 
 ### Saved Recipes & Collections
 - Save any AI-generated recipe to a named collection
@@ -87,6 +106,11 @@ A Node.js/Express REST API for Food Center — an African food discovery platfor
 - Streak logic: increments on a new calendar day, resets to 1 if a day is skipped
 - All stat updates are a single atomic MongoDB aggregation-pipeline update — no read-modify-write race conditions
 
+### Editorials
+- Weekly curated spotlight on a cuisine or dish
+- `GET /editorials/active` — returns the current week's editorial (public)
+- Admin-protected create, update, and delete endpoints
+
 ### File Uploads
 - `POST /upload` — multipart image upload via Multer → Cloudinary; returns `secure_url`
 
@@ -103,6 +127,7 @@ A Node.js/Express REST API for Food Center — an African food discovery platfor
 - Google Cloud project with YouTube Data API v3 and Gemini API enabled
 - Mailgun account (for welcome emails)
 - Inngest account or local Inngest CLI (for background jobs)
+- Stripe account (for billing — test keys work fine locally)
 
 ### Installation
 
@@ -144,8 +169,16 @@ MAILGUN_REGION=us                    # or eu
 # App
 NODE_ENV=development
 ALLOWED_ORIGINS=http://localhost:5173  # comma-separated in production
-CLIENT_URL=http://localhost:5173       # used in email links
+CLIENT_URL=http://localhost:5173       # used in email links and Stripe redirects
+
+# Stripe (billing)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PRO_PRICE_ID=price_...        # monthly Pro subscription price ID
+STRIPE_CREDITS_PRICE_ID=price_...   # one-time 10-credit pack price ID
+STRIPE_WEBHOOK_SECRET=whsec_...      # from Stripe Dashboard → Webhooks
 ```
+
+> **Stripe local testing**: run `stripe listen --forward-to localhost:3000/api/v1/billing/webhook` in a separate terminal to forward webhook events during development.
 
 ### Running
 
@@ -164,7 +197,7 @@ npm run lint
 npm run lint:fix
 ```
 
-The API server listens on **port 3000**. Base path: `/api/v1`.  
+The API server listens on **port 3000**. Base path: `/api/v1`.
 The Inngest dev server runs on **port 8288**.
 
 ---
@@ -173,7 +206,7 @@ The Inngest dev server runs on **port 8288**.
 
 Base URL: `http://localhost:3000/api/v1`
 
-All write endpoints that are admin-only require the header `x-api-key: <API_SECRET>`.  
+All write endpoints that are admin-only require the header `x-api-key: <API_SECRET>`.
 All user endpoints that are auth-required need `Authorization: Bearer <JWT>`.
 
 ### Authentication — `/auth`
@@ -182,7 +215,7 @@ All user endpoints that are auth-required need `Authorization: Bearer <JWT>`.
 |---|---|---|---|
 | POST | `/auth/register` | — | Register; returns `{ token, user }` |
 | POST | `/auth/login` | — | Login; returns `{ token, user }` |
-| GET | `/auth/me` | JWT | Return current user with stats |
+| GET | `/auth/me` | JWT | Return current user with stats and credits |
 
 ### Foods — `/foods`
 
@@ -211,10 +244,20 @@ All user endpoints that are auth-required need `Authorization: Bearer <JWT>`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/recipes/suggest` | Optional JWT | Stream SSE recipe suggestions. Body: `{ ingredients: string[] }` |
+| POST | `/recipes/suggest` | Optional JWT | Stream SSE recipe suggestions. Body: `{ ingredients: string[] }`. First SSE event: `{ mode: "premium" \| "standard" }` |
 | POST | `/recipes/images` | — | Generate Cloudinary images for recipes. Body: `{ recipes: [{ name, region }] }` |
 
-Rate limits: `/suggest` — 10 req / 15 min; `/images` — 5 req / 15 min (per IP, in addition to the global 1000 req / 15 min limit).
+Rate limits: `/suggest` — 10 req / 15 min per IP; `/images` — 5 req / 15 min per IP.
+Free users are additionally capped at **3 generations per day** (Redis counter). Credits are spent automatically when the cap is hit.
+
+### Billing — `/billing` *(JWT required)*
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/billing/checkout` | Create Stripe Checkout session for Pro subscription. Returns `{ url }` |
+| POST | `/billing/credits` | Create Stripe Checkout session for 10-credit pack. Returns `{ url }` |
+| POST | `/billing/portal` | Create Stripe billing portal session. Returns `{ url }` |
+| POST | `/billing/webhook` | Stripe webhook receiver (raw body, no auth) |
 
 ### Saved Recipes — `/saved-recipes` *(JWT required)*
 
@@ -252,6 +295,16 @@ Rate limits: `/suggest` — 10 req / 15 min; `/images` — 5 req / 15 min (per I
 |---|---|---|
 | GET | `/trending` | Top 10 trending ingredients for the current week |
 
+### Editorials — `/editorials`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/editorials/active` | — | Current week's editorial, or null |
+| GET | `/editorials` | Admin key | All editorials |
+| POST | `/editorials` | Admin key | Create editorial |
+| PUT | `/editorials/:id` | Admin key | Update editorial |
+| DELETE | `/editorials/:id` | Admin key | Delete editorial |
+
 ### Upload — `/upload`
 
 | Method | Path | Description |
@@ -264,7 +317,8 @@ Rate limits: `/suggest` — 10 req / 15 min; `/images` — 5 req / 15 min (per I
 
 ### User
 ```
-name, email, password (hashed), plan (free|pro), createdAt
+name, email, password (hashed), plan (free|pro), credits,
+stripeCustomerId, stripeSubscriptionId, createdAt
 stats: {
   currentStreak, longestStreak, lastActiveDate,
   totalRecipesGenerated, totalRecipesSaved,
@@ -307,6 +361,11 @@ userId (ref), weekStart (Monday UTC midnight), slots[]: { day 0–6, savedRecipe
 userId (ref, unique), ingredients[], updatedAt
 ```
 
+### Editorial
+```
+title, region, description, imageUrl?, featuredFoodIds[], activeWeek (Monday UTC), createdAt
+```
+
 ---
 
 ## Project Structure
@@ -327,9 +386,11 @@ food_center_api/
 │   ├── middleware/
 │   │   ├── auth.ts                 # Admin x-api-key guard
 │   │   ├── userAuth.ts             # JWT user guard
-│   │   └── optionalUserAuth.ts     # JWT attach if present (no 401 if absent)
+│   │   ├── optionalUserAuth.ts     # JWT attach if present (no 401 if absent)
+│   │   └── freemiumCheck.ts        # Daily cap + credit deduction for free users
 │   └── modules/
 │       ├── auth/                   # Register, login, /me
+│       ├── billing/                # Stripe checkout, portal, webhook
 │       ├── food/                   # Food CRUD + filtering
 │       ├── influencer/             # Influencer CRUD + Inngest trigger
 │       ├── upload/                 # Cloudinary file upload
@@ -337,12 +398,13 @@ food_center_api/
 │       ├── savedRecipes/           # Saved recipes + collections
 │       ├── mealPlan/               # Weekly meal planning
 │       ├── pantry/                 # Per-user ingredient pantry
-│       └── trending/               # Redis-backed trending ingredients
+│       ├── trending/               # Redis-backed trending ingredients
+│       └── editorial/              # Weekly curated editorial
 └── utils/
     ├── logger.ts                   # Pino logger
     ├── tryCatchHelper.ts           # Async error wrapper
     └── services/
-        ├── redis.ts                # Redis client + helpers
+        ├── redis.ts                # Redis client + helpers (incl. incrExpireAtMidnight)
         ├── stats.ts                # Atomic user stats updater
         ├── mailgun.ts              # Transactional email
         └── youtube.ts              # YouTube metadata fetch
@@ -356,9 +418,11 @@ food_center_api/
 - **CORS** — restricted to `ALLOWED_ORIGINS` in production, open in development
 - **Global rate limit** — 1000 requests / 15 min per IP
 - **AI endpoint rate limits** — tighter limits on `/recipes/suggest` (10/15 min) and `/recipes/images` (5/15 min)
+- **Freemium cap** — 3 generations/day per authenticated free user (Redis); credits spent atomically before blocking
 - **Admin routes** — protected by `x-api-key` header
 - **User routes** — protected by JWT; tokens expire after 7 days
 - **Password hashing** — bcrypt with cost factor 12
+- **Stripe webhooks** — signature verified via `stripe.webhooks.constructEvent`; raw body preserved before `express.json()`
 
 ## Logging
 

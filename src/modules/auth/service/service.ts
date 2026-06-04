@@ -29,8 +29,11 @@ class AuthService {
 
     logger.info({ userId: user._id }, "[AuthService]: New user registered");
 
-    // Fire-and-forget — welcome email must never block or fail registration
-    sendWelcomeEmail({ email: user.email, name: user.name });
+    // Fire-and-forget — welcome email must never block or fail registration.
+    // Skip in non-production so dev/test runs don't spam Mailgun sandbox limits.
+    if (process.env.NODE_ENV === "production") {
+      sendWelcomeEmail({ email: user.email, name: user.name });
+    }
 
     return { token: signToken(user._id.toString(), user.plan), user: safeUser(user) };
   };
