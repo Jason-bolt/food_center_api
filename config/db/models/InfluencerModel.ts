@@ -11,7 +11,8 @@ const InfluencerSchema = new mongoose.Schema({
   twitter: { type: String, required: false },
   snapchat: { type: String, required: false },
   website: { type: String, required: false },
-  linkedin: { type: String, required: false },
+  linkedin:  { type: String, required: false },
+  featured:  { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

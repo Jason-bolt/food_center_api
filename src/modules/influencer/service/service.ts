@@ -38,7 +38,8 @@ class InfluencerService implements IService {
 
   getInfluencers = async () => {
     try {
-      const influencers = await InfluencerModel.find();
+      // Featured influencers appear first
+      const influencers = await InfluencerModel.find().sort({ featured: -1, createdAt: -1 });
       logger.info(
         { influencersCount: influencers.length },
         "[InfluencerService - getInfluencers]: Successfully fetched all influencers"
