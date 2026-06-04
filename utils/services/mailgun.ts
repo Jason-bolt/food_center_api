@@ -136,6 +136,47 @@ Get started: ${process.env.CLIENT_URL ?? "http://localhost:5173"}/ai
 `.trim();
 
 /**
+ * Sends a "want to be featured" inquiry to the platform admin.
+ * Errors are caught and logged — a failed email never blocks the response.
+ */
+export const sendFeaturedInquiryEmail = async (params: {
+  name: string;
+  email: string;
+  message: string;
+}): Promise<void> => {
+  const domain = process.env.MAILGUN_DOMAIN;
+  const from = process.env.MAILGUN_FROM ?? `Food Center <noreply@${domain}>`;
+  const adminEmail = process.env.ADMIN_EMAIL;
+
+  if (!domain || !adminEmail) {
+    logger.warn("[Mailgun]: MAILGUN_DOMAIN or ADMIN_EMAIL not set — skipping inquiry email");
+    return;
+  }
+
+  try {
+    const client = buildClient();
+    await client.messages.create(domain, {
+      from,
+      to: [adminEmail],
+      "reply-to": params.email,
+      subject: `Featured Creator Inquiry — ${params.name}`,
+      text: `New featured slot inquiry\n\nName: ${params.name}\nEmail: ${params.email}\n\nMessage:\n${params.message}\n\nReply directly to this email to respond.`,
+      html: `
+        <p><strong>New featured slot inquiry</strong></p>
+        <p><strong>Name:</strong> ${params.name}<br/>
+        <strong>Email:</strong> <a href="mailto:${params.email}">${params.email}</a></p>
+        <p><strong>Message:</strong><br/>${params.message.replace(/\n/g, "<br/>")}</p>
+        <hr/>
+        <p style="color:#9ca3af;font-size:12px;">Reply directly to this email to respond to the creator.</p>
+      `.trim(),
+    });
+    logger.info({ email: params.email }, "[Mailgun]: Featured inquiry email sent");
+  } catch (err) {
+    logger.error({ err }, "[Mailgun]: Failed to send featured inquiry email");
+  }
+};
+
+/**
  * Sends a welcome email to a newly registered user.
  * Errors are caught and logged — a failed email never breaks registration.
  */
