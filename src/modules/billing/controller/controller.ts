@@ -44,6 +44,29 @@ class BillingController {
     res.json({ url: session.url });
   };
 
+  /**
+   * Authorises a PDF download — deducts 1 credit for free users.
+   * Pro users pass through instantly; free users with no credits are blocked.
+   */
+  authorisePdfDownload = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const plan   = req.userPlan;
+
+    if (plan === "pro") { res.json({ allowed: true, creditsUsed: 0 }); return; }
+
+    const updated = await UserModel.findOneAndUpdate(
+      { _id: userId, credits: { $gt: 0 } },
+      { $inc: { credits: -1 } },
+      { new: true },
+    );
+
+    if (updated) {
+      res.json({ allowed: true, creditsUsed: 1, creditsRemaining: updated.credits });
+    } else {
+      res.status(402).json({ allowed: false, error: "no_credits", message: "No credits remaining. Upgrade to Pro or buy credits." });
+    }
+  };
+
   createCreditsCheckout = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.userId!;
     const customerId = await this.ensureCustomer(userId);
