@@ -35,21 +35,24 @@ class FoodService implements IService {
     try {
       const skip = (page - 1) * limit;
 
-      const whereClause: any =
-        {};
+      /** Escape all regex-special characters so user input is treated as a
+       *  plain substring, preventing ReDoS and unintended wildcard matches. */
+      const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      const whereClause: any = {};
       if (search) {
-        whereClause.name = { $regex: search, $options: "i" };
+        whereClause.name = { $regex: escapeRegex(search), $options: "i" };
       }
       if (country) {
         whereClause.countries = {
           $elemMatch: {
-            $regex: country,
+            $regex: escapeRegex(country),
             $options: "i",
           },
         };
       }
       if (region) {
-        whereClause.region = { $regex: region, $options: "i" };
+        whereClause.region = { $regex: escapeRegex(region), $options: "i" };
       }
 
       const foods = await FoodModel.find(whereClause).skip(skip).limit(limit);
