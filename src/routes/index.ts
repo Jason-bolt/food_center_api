@@ -10,6 +10,7 @@ import trendingRouter from "../modules/trending/route";
 import pantryRouter from "../modules/pantry/route";
 import editorialRouter from "../modules/editorial/route";
 import billingRouter from "../modules/billing/route";
+import developerRouter from "../modules/developer/route";
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use("/trending", trendingRouter);
 router.use("/pantry", pantryRouter);
 router.use("/editorials", editorialRouter);
 router.use("/billing", billingRouter);
+router.use("/developer", developerRouter);
 
 export default router;

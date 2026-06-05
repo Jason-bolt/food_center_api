@@ -6,6 +6,7 @@ import tryCatchHelper from "../../../utils/tryCatchHelper";
 const billingRouter = Router();
 
 billingRouter.post("/checkout", userAuthMiddleware, tryCatchHelper(billingController.createCheckout));
+billingRouter.post("/pdf-download", userAuthMiddleware, tryCatchHelper(billingController.authorisePdfDownload));
 billingRouter.post("/credits", userAuthMiddleware, tryCatchHelper(billingController.createCreditsCheckout));
 billingRouter.post("/portal", userAuthMiddleware, tryCatchHelper(billingController.createPortal));
 

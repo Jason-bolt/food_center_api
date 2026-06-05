@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express";
 import { type AuthenticatedRequest } from "./userAuth";
+import { type ApiKeyRequest } from "./apiKeyAuth";
 import { incrExpireAtMidnight } from "../../utils/services/redis";
 import UserModel from "../../config/db/models/UserModel";
 import logger from "../../utils/logger";
@@ -7,12 +8,15 @@ import logger from "../../utils/logger";
 const FREE_DAILY_LIMIT = 3;
 
 export const freemiumCheckMiddleware = async (
-  req: AuthenticatedRequest,
+  req: AuthenticatedRequest & ApiKeyRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   const userId = req.userId;
   const plan = req.userPlan;
+
+  // API key requests are already rate-limited by their monthly quota
+  if (req.apiKeyDoc) { next(); return; }
 
   // Guests are handled by the existing IP-based rate limiter
   if (!userId) { next(); return; }
