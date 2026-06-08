@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import router from "./src/routes";
 import { connectDB } from "./config/db";
 import { connectRedis } from "./utils/services/redis";
@@ -50,6 +50,24 @@ app.use(helmet());
 
 app.use("/api/inngest", serve({ client: inngest, functions }));
 app.use("/api/v1", router);
+
+// Global error handler — catches body-parser SyntaxError (malformed JSON) and
+// any other unhandled errors, returning a clean JSON response instead of an
+// HTML stack trace that leaks internal file paths.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error & { status?: number; type?: string }, _req: Request, res: Response, _next: NextFunction) => {
+  if (err.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Invalid JSON in request body" });
+    return;
+  }
+  if (err.type === "entity.too.large") {
+    res.status(413).json({ error: "Request body too large" });
+    return;
+  }
+  logger.error({ err: err.message }, "[Global]: Unhandled error");
+  const status = err.status ?? 500;
+  res.status(status).json({ error: status < 500 ? err.message : "Internal server error" });
+});
 
 const start = async () => {
   await connectDB();

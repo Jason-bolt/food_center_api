@@ -6,6 +6,6 @@ export const createFoodSchema = z.object({
   region: z.string().min(1),
   culturalStory: z.string().min(1),
   description: z.string().min(1),
-  imageUrl: z.string().min(1),
+  imageUrl: z.string().url("imageUrl must be a valid URL"),
   ingredients: z.array(z.string()).min(1),
 });

@@ -35,8 +35,8 @@ class FoodController implements IController {
 
   getFoods = async (req: Request, res: Response) => {
     const cacheParams = {
-      page: Number(req.query.page) || 1,
-      limit: Number(req.query.limit) || 10,
+      page: Math.max(1, Number(req.query.page) || 1),
+      limit: Math.min(100, Math.max(1, Number(req.query.limit) || 10)),
       search: req.query.search as string | undefined,
       country: req.query.country as string | undefined,
       region: req.query.region as string | undefined,

@@ -19,13 +19,23 @@ const safeUser = (user: { _id: unknown; name: string; email: string; plan: strin
   stats:   user.stats ?? {}, // always include stats so the client never receives a zeroed default
 });
 
+// Pre-computed bcrypt hash used for constant-time comparison when a user is not
+// found, preventing email enumeration via response-time differences. The value
+// is a real cost-12 hash so bcrypt.compare takes the same ~300 ms.
+const DUMMY_HASH = "$2b$12$R5GSP7n3wqlhzxfQmBhGdOiMPzNLwBl7rIYtDw75Rs1pjzMAbjrhi";
+
 class AuthService {
   register = async (name: string, email: string, password: string) => {
-    const existing = await UserModel.findOne({ email });
-    if (existing) throw new Error("Email already in use");
-
     const hash = await bcrypt.hash(password, 12);
-    const user = await UserModel.create({ name, email, password: hash });
+
+    let user;
+    try {
+      user = await UserModel.create({ name, email, password: hash });
+    } catch (err: unknown) {
+      // Duplicate key — handles the race between findOne and create
+      if ((err as { code?: number }).code === 11000) throw new Error("Email already in use");
+      throw err;
+    }
 
     logger.info({ userId: user._id }, "[AuthService]: New user registered");
 
@@ -40,10 +50,10 @@ class AuthService {
 
   login = async (email: string, password: string) => {
     const user = await UserModel.findOne({ email });
-    if (!user) throw new Error("Invalid credentials");
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) throw new Error("Invalid credentials");
+    // Always run bcrypt to prevent timing-based email enumeration
+    const valid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
+    if (!user || !valid) throw new Error("Invalid credentials");
 
     logger.info({ userId: user._id }, "[AuthService]: User logged in");
     return { token: signToken(user._id.toString(), user.plan), user: safeUser(user) };
